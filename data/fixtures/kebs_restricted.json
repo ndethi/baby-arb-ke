@@ -1,0 +1,36 @@
+{
+  "_comment": "KEBS restricted/regulated items list. Update via PR. See docs/compliance_rules.md.",
+  "_version": "2026-05-10",
+  "blocked": [
+    {
+      "keyword": "drop-side crib",
+      "reason": "Drop-side cribs banned in US since 2011, KEBS aligned"
+    },
+    {
+      "keyword": "rock 'n play",
+      "reason": "Fisher-Price Rock 'n Play recalled, banned for resale"
+    },
+    {
+      "keyword": "inclined sleeper",
+      "reason": "Inclined sleepers banned 2019"
+    }
+  ],
+  "review": [
+    {
+      "keyword": "mattress",
+      "reason": "Mattresses require KEBS PVoC certification"
+    },
+    {
+      "keyword": "steriliser",
+      "reason": "Electrical baby items require KEBS approval"
+    },
+    {
+      "keyword": "sterilizer",
+      "reason": "Electrical baby items require KEBS approval"
+    },
+    {
+      "keyword": "baby monitor",
+      "reason": "Electronic monitors require type approval"
+    }
+  ]
+}

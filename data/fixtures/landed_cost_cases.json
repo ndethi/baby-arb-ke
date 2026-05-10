@@ -1,0 +1,82 @@
+{
+  "_comment": "Canonical landed-cost cases. Each case represents an outcome the engine MUST produce. Update via PR with explanation when reality changes (FX, customs, carrier rates).",
+  "_version": "0.1.0",
+  "cases": [
+    {
+      "name": "stroller_mid_size_dhl_de_warehouse",
+      "input": {
+        "listing_price_usd": "120.00",
+        "us_shipping_usd": "18.00",
+        "weight_lb": "22",
+        "weight_source": "listed",
+        "length_in": "30", "width_in": "16", "height_in": "12",
+        "warehouse_state": "DE",
+        "carrier": "dhl_express",
+        "fx_rate": "145.5",
+        "category": "stroller"
+      },
+      "expected": {
+        "verdict_floor_kes": 0,
+        "expected_dim_dominated": false,
+        "min_total_landed_kes": 50000,
+        "max_total_landed_kes": 90000,
+        "us_sales_tax_should_be": "0"
+      }
+    },
+    {
+      "name": "carseat_de_warehouse_dim_dominated",
+      "input": {
+        "listing_price_usd": "180.00",
+        "us_shipping_usd": "22.00",
+        "weight_lb": "9",
+        "weight_source": "listed",
+        "length_in": "18", "width_in": "18", "height_in": "24",
+        "warehouse_state": "DE",
+        "carrier": "dhl_express",
+        "fx_rate": "145.5",
+        "category": "car_seat"
+      },
+      "expected": {
+        "expected_dim_dominated": true,
+        "min_total_landed_kes": 100000,
+        "us_sales_tax_should_be": "0"
+      }
+    },
+    {
+      "name": "carseat_tx_warehouse_with_sales_tax",
+      "input": {
+        "listing_price_usd": "180.00",
+        "us_shipping_usd": "22.00",
+        "weight_lb": "9",
+        "weight_source": "listed",
+        "length_in": "18", "width_in": "18", "height_in": "24",
+        "warehouse_state": "TX",
+        "carrier": "dhl_express",
+        "fx_rate": "145.5",
+        "category": "car_seat"
+      },
+      "expected": {
+        "expected_dim_dominated": true,
+        "us_sales_tax_should_be_positive": true
+      }
+    },
+    {
+      "name": "stroller_sea_freight_consolidation",
+      "input": {
+        "listing_price_usd": "120.00",
+        "us_shipping_usd": "18.00",
+        "weight_lb": "22",
+        "weight_source": "listed",
+        "length_in": "30", "width_in": "16", "height_in": "12",
+        "warehouse_state": "DE",
+        "carrier": "sea_freight",
+        "fx_rate": "145.5",
+        "category": "stroller"
+      },
+      "expected": {
+        "min_total_landed_kes": 25000,
+        "max_total_landed_kes": 60000
+      }
+    }
+  ]
+}

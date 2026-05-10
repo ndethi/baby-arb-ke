@@ -1,0 +1,26 @@
+name: Changelog
+on:
+  push:
+    branches: [main]
+
+jobs:
+  changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install commitizen
+        run: pip install commitizen
+      - name: Generate changelog
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          cz changelog --incremental
+          git add CHANGELOG.md
+          git diff --staged --quiet || git commit -m "chore(changelog): update for $(cz version -p)"
+          git push

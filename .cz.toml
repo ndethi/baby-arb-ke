@@ -1,0 +1,13 @@
+[tool.commitizen]
+name = "cz_conventional_commits"
+version = "0.1.0"
+version_files = [
+    "pyproject.toml:version",
+    "src/baby_arb/__init__.py:__version__"
+]
+update_changelog_on_bump = true
+changelog_incremental = true
+tag_format = "v$version"
+
+[tool.commitizen.customize]
+schema_pattern = "(feat|fix|docs|test|refactor|perf|chore|ci|data|eval|sourcing|pricing)(\\(\\S+\\))?!?:(\\s.*)"

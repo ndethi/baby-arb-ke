@@ -1,0 +1,24 @@
+{
+  "_comment": "Synthetic CPSC recall data for tests. NOT for production. Production fetches live from saferproducts.gov.",
+  "fetched_at": "2026-05-10T00:00:00+00:00",
+  "recalls": [
+    {
+      "id": "synthetic-001",
+      "title": "Fisher-Price Rock 'n Play Sleeper recall",
+      "match_strings": ["Fisher-Price Rock 'n Play", "Rock 'n Play Sleeper"],
+      "year": 2019
+    },
+    {
+      "id": "synthetic-002",
+      "title": "Boppy Newborn Lounger recall",
+      "match_strings": ["Boppy Newborn Lounger", "Boppy Original Lounger", "Boppy Preferred Lounger"],
+      "year": 2021
+    },
+    {
+      "id": "synthetic-003",
+      "title": "MockBrand stroller (test fixture)",
+      "match_strings": ["MockBrand X1 stroller"],
+      "year": 2024
+    }
+  ]
+}
