@@ -201,7 +201,8 @@ def main():
         print("=========================================")
         
         # Save to file for potential debugging or alternative delivery methods
-        with open('/tmp/baby_arb_demand_report.txt', 'w') as f:
+        os.makedirs('data/cache', exist_ok=True)
+        with open('data/cache/demand_report_latest.txt', 'w') as f:
             f.write(message)
         
         # Send to Telegram if credentials are available
