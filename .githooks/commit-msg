@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Enforce commit header format from .cz.toml. Enable once per clone: git config core.hooksPath .githooks
+exec python3 scripts/check_commit_msg.py "$1"
