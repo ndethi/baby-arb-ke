@@ -58,3 +58,22 @@ One entry per pre-push gate run. Written by scripts/pre_push.sh.
 | secrets | PASS | regex fallback (gitleaks not installed) |
 | pip-audit | PASS |  |
 | prompt-log | PASS | docs/audit/prompts/task-repo-cleanup.md |
+
+## 2026-09-27T13:25Z · 0827606 · PASS
+
+- base: origin/main (4672247)
+- runner: ndethi
+
+| check | result | detail |
+|---|---|---|
+| branch | PASS | task/repo-cleanup |
+| clean-tree | PASS |  |
+| commits | PASS | 20 commits |
+| hygiene | PASS |  |
+| ruff | PASS | 17 files |
+| ruff-scripts | WARN | lint debt in changed ops scripts (advisory) |
+| pytest | PASS |  |
+| bandit | PASS | medium+ severity |
+| secrets | PASS | regex fallback (gitleaks not installed) |
+| pip-audit | PASS |  |
+| prompt-log | PASS | docs/audit/prompts/task-repo-cleanup.md |
