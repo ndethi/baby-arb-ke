@@ -21,9 +21,6 @@ wheels/
 *.egg
 MANIFEST
 
-# Poetry
-poetry.lock
-
 # Virtual environments
 .env
 .venv
@@ -49,6 +46,8 @@ htmlcov/
 
 # Project-specific
 data/cache/
+data/tracker/
+data/demand_gen/
 *.db
 *.sqlite
 *.sqlite3
@@ -62,3 +61,13 @@ logs/
 # Hermes/agent local state
 .hermes/
 .openclaw/
+
+# Local archive of removed scratch files, editor/manual backups
+.archive/
+*.bak
+*.backup*
+*.orig
+*.broken
+
+# Gate run scratch output (the committed record lives in docs/audit/)
+.gate/
