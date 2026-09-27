@@ -34,3 +34,10 @@
   and the non-conforming `feature/on-demand-breast-pump-check` branch name. Listed for Watson.
 
 **Outcome:** see commits on this branch; gate record in `docs/audit/gates/task-repo-cleanup.md`.
+
+### Gate follow-up (same session)
+- First gate run FAILED on pip-audit (7 advisories in anyio, pydantic-settings, soupsieve,
+  pytest); fixed in `fix(deps): upgrade packages with known cves`. The pytest 9 upgrade silently
+  broke collection with pytest-asyncio 0.23 ("no tests ran"), caught before commit; bumped to ^1.2.
+- The first run also showed the gated SHA skipped prompt-log commits; narrowed the exclusion to
+  `docs/audit/gates/` only.
