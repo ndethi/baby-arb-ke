@@ -1,6 +1,7 @@
 # Live data collection plan
 
-Status: proposal for Watson's review (2026-09-27). Nothing here is built yet.
+Status: proposal for Watson's review (2026-09-27). Nothing here is built yet; demo-fed cron jobs
+paused 2026-09-27 (see Decisions).
 
 ## Where we are
 
@@ -103,7 +104,12 @@ aggregator → Trend PM brief → pricing engine + compliance gate → Telegram
 
 ## Decisions for Watson
 
-1. Pause the demo-fed cron jobs now, or keep them running until Phase 0 lands?
+1. ~~Pause the demo-fed cron jobs now?~~ **Decided 2026-09-27: yes.** Paused with
+   `hermes --profile default cron pause <id>`: baby-arb-demand-update, test-multi-source-demand,
+   baby-arb-daily-alert, baby-arb-weekly-brief, baby-arb-weekly-demand-gen,
+   aggregator-top5-weighted. Resume with `hermes --profile default cron resume <id>` only once
+   Phase 0 lands. Still running: smart-baby-tech-demand-gen (live fetches, but its scores are
+   word counts in raw HTML, e.g. "marketplace" on Facebook's login page; pause pending decision).
 2. Do you have eBay developer keys, or should we register an app?
 3. Jiji: direct HTML snapshots (free, some breakage risk) or Apify (paid, maintained)?
 4. OK to drop Reddit/BabyCenter/Mumsnet and the Mercari/OfferUp/FB HTML scrapers?

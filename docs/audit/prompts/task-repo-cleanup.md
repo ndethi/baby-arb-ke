@@ -41,3 +41,20 @@
   broke collection with pytest-asyncio 0.23 ("no tests ran"), caught before commit; bumped to ^1.2.
 - The first run also showed the gated SHA skipped prompt-log commits; narrowed the exclusion to
   `docs/audit/gates/` only.
+
+## 2026-09-27 · Claude Code (claude-opus-5-5)
+
+**Prompt** (verbatim):
+> 1. demo-fed crons should stop
+
+**Decisions:**
+- Paused (not removed) the six jobs whose output derives from demo values: demand-update and
+  multi-source (demo collectors), daily-alert, weekly-brief and weekly-demand-gen (read the
+  demand_scout cache those collectors write), aggregator-top5 (demo-tuned multipliers, trackers
+  stale since 2026-06-01). Backup of jobs.json taken before the change.
+- Jobs live in the Hermes `default` profile while the sticky profile is `faber`, so plain
+  `hermes cron pause` reported "not found"; used `hermes --profile default`.
+- Left smart-baby-tech-demand-gen running: it has no demo values, but its scores are HTML word
+  counts. Flagged for Watson rather than paused, since the instruction was "demo-fed".
+
+**Outcome:** jobs paused and verified in `~/.hermes/cron/jobs.json`; plan doc updated.
