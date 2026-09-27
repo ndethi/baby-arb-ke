@@ -58,3 +58,19 @@
   counts. Flagged for Watson rather than paused, since the instruction was "demo-fed".
 
 **Outcome:** jobs paused and verified in `~/.hermes/cron/jobs.json`; plan doc updated.
+
+## 2026-09-27 · Claude Code (claude-opus-5-5)
+
+**Prompt** (verbatim):
+> i dont have ebay dev keys, how do i go around this
+> jiji scrape pages directly
+> lets keep those other scrapters
+> pr yes lets push that pr and open it
+
+**Decisions:**
+- Recorded in `docs/live_scraping_plan.md`: register eBay developer app (with account-deletion
+  exemption); build Phase 1 against fixtures/sandbox meanwhile; Jiji via direct HTML; keep the
+  Reddit/BabyCenter/Mumsnet and Mercari/OfferUp/FB scrapers and migrate them in Phase 3.
+- Noted eBay robots.txt disallows `/sch/i.html?_nkw=`, which the kept scrapers use.
+
+**Outcome:** plan updated; branch pushed and PR opened for Watson's review.

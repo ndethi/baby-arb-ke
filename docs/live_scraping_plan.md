@@ -59,8 +59,8 @@ Hermes already runs this repo's scripts on a schedule (`~/.hermes/cron/jobs.json
 | 2 | **Jiji.co.ke** | KE demand + KE used resale price | HTML of category/search pages, daily snapshot | robots.txt allows general crawling (query-string pages are only disallowed for Bingbot). Search redirects (302), so a spike must confirm the stable URLs. Listings that disappear between snapshots give a sold-in-30-days proxy; the median asking price gives the resale estimate. Apify actor is the fallback if the HTML is JS-rendered or blocked. |
 | 3 | **Jumia / Kilimall** | KE new-retail price ceiling, stockouts | HTML product pages, weekly | Low volume; a stockout on a popular SKU is a demand signal. |
 | 4 | FB parenting groups, IG, TikTok | KE social pull | Manual entry now; Apify/Phyllo later | Out of scope until budget; keep `demand add` manual path. |
-| — | Reddit, BabyCenter, Mumsnet | US/UK parent sentiment | Drop | Not KE demand; mostly blocked. Keep only as a model-name dictionary if useful. |
-| — | Mercari, OfferUp, FB Marketplace HTML | US supply | Drop for now | Out of MVP scope per README; brittle; FB needs login. |
+| 5 | Reddit, BabyCenter, Mumsnet | US/UK parent sentiment, model names | Keep (Watson, 2026-09-27) | Not KE demand; Reddit mostly blocked. Weight low in scoring. |
+| 6 | Mercari, OfferUp, FB Marketplace HTML | US supply | Keep (Watson, 2026-09-27) | Brittle; FB needs login, so expect UNKNOWN there. |
 
 ## Architecture
 
@@ -99,7 +99,7 @@ aggregator → Trend PM brief → pricing engine + compliance gate → Telegram
 | 0. Stop fabricated signals | Collectors return UNKNOWN instead of demo values; alerts say "no live data" where true; Watson decides whether to pause the demo-fed cron jobs | No `*_demo` values reach Telegram |
 | 1. US supply | eBay Browse API client + storage layer (HANDOFF 1-2) | `baby-arb collect --source ebay` stores observations for the watchlist |
 | 2. KE demand | Jiji spike (URL scheme, rendering, block rate), then snapshot collector + derive; Jumia reference prices | 14 days of snapshots; sold-30d proxy and median price per watchlist item |
-| 3. Rewire | Cron jobs call the CLI from the live worktree; retire `scripts/scrape_*`, `collect_multi_source`, demo paths; weekly brief resumes on real data | Brief lists items with provenance, or says why it can't |
+| 3. Rewire | Cron jobs call the CLI from the live worktree; move `scripts/scrape_*` and `collect_multi_source` behind the CLI, remove demo paths; weekly brief resumes on real data | Brief lists items with provenance, or says why it can't |
 | 4. Social | Apify/Phyllo for IG/TikTok/FB when budget allows | Cost per signal known |
 
 ## Decisions for Watson
@@ -110,6 +110,13 @@ aggregator → Trend PM brief → pricing engine + compliance gate → Telegram
    aggregator-top5-weighted. Resume with `hermes --profile default cron resume <id>` only once
    Phase 0 lands. Still running: smart-baby-tech-demand-gen (live fetches, but its scores are
    word counts in raw HTML, e.g. "marketplace" on Facebook's login page; pause pending decision).
-2. Do you have eBay developer keys, or should we register an app?
-3. Jiji: direct HTML snapshots (free, some breakage risk) or Apify (paid, maintained)?
-4. OK to drop Reddit/BabyCenter/Mumsnet and the Mercari/OfferUp/FB HTML scrapers?
+2. ~~eBay developer keys?~~ **2026-09-27: none yet.** Register a free app at developer.ebay.com
+   (production keyset; Browse API needs only an application token, default 5,000 calls/day).
+   Production keys require the Marketplace Account Deletion notification: we store no eBay user
+   data, so apply for the exemption. Until keys arrive, Phase 1 is built against respx fixtures and
+   eBay sandbox; the HTML scrapers stay, but note eBay robots.txt disallows `/sch/i.html?_nkw=`.
+3. ~~Jiji: direct HTML or Apify?~~ **2026-09-27: direct HTML snapshots.** Apify stays the fallback
+   only if the spike shows JS rendering or blocking.
+4. ~~Drop Reddit/BabyCenter/Mumsnet and Mercari/OfferUp/FB scrapers?~~ **2026-09-27: keep them.**
+   Phase 3 migrates them behind `baby-arb collect` with the same provenance/UNKNOWN rules instead
+   of retiring them.
