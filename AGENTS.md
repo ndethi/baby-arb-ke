@@ -10,7 +10,7 @@ marketplaces based on Kenyan demand signals, route through a US
 consolidator, and resell at margins that net 30%+ after all costs.
 
 **Operator:** Watson Ndethi
-**Repo:** github.com/{{REPO_OWNER}}/baby-arb-ke
+**Repo:** github.com/ndethi/baby-arb-ke
 
 ---
 
@@ -20,7 +20,8 @@ Before doing any work:
 
 1. Read SOUL.md — project identity, domain knowledge, hard constraints.
 2. Read the relevant doc in docs/ for the task you are working on.
-3. Check docs/skills/ for a SKILL.md matching your role.
+3. Check docs/skills/ for a SKILL.md matching your role. For any change
+   that ends in a commit, follow docs/skills/dev-lifecycle/SKILL.md.
 4. If you are touching pricing or compliance code, re-read those skills
    in full before writing any code. They have veto power and their
    logic is non-negotiable.
@@ -87,7 +88,12 @@ baby-arb-ke/
     demand/                        KE signal aggregator
     storage/                       SQLite/Postgres adapters
   tests/                           pytest, synthetic fixtures only
-  scripts/                         one-off ops scripts
+  scripts/                         ops scripts (some run by Hermes cron) + gate tooling
+  .githooks/                       commit-msg + pre-push hooks (git config core.hooksPath .githooks)
+  .claude/skills/                  symlinks to repo-process skills in docs/skills/
+  docs/audit/
+    gates/                         pre-push gate records, one file per branch
+    prompts/                       prompt logs, one file per branch
   data/
     fixtures/                      test fixtures (committed)
     cache/                         runtime cache (gitignored)
@@ -141,6 +147,8 @@ data(fixtures): add 12 stroller listings for pricing tests
 - **Never override the 50% margin floor.** No "this one is special".
 - **Never auto-buy above $200.** Telegram approval required.
 - **Never push to main.** Branch + PR always.
+- **Never push without a PASS gate record.** Run scripts/pre_push.sh; no --no-verify.
+- **Never fabricate market data.** Unavailable source → UNKNOWN with a reason, not demo values.
 - **Never invent KE retail prices.** If no source, mark UNKNOWN and abstain.
 - **Never store credentials in repo.** Env vars only, gitignored .env.
 - **Never set status: approved on a buy candidate.** Human gate.

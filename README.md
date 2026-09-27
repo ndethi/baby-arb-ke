@@ -59,7 +59,7 @@ Out of scope until shadow pilot validates margin discipline:
 
 ```bash
 # Clone and install
-git clone git@github.com:{{REPO_OWNER}}/baby-arb-ke.git
+git clone git@github.com:ndethi/baby-arb-ke.git
 cd baby-arb-ke
 poetry install
 poetry shell
@@ -68,9 +68,8 @@ poetry shell
 cp .env.example .env
 # Edit .env with your eBay App ID and other keys
 
-# Install commitizen for commits
-pip install commitizen pre-commit
-pre-commit install --hook-type commit-msg
+# Enable the committed git hooks (commit-msg format, pre-push gate record)
+git config core.hooksPath .githooks
 
 # Run tests
 pytest
@@ -81,6 +80,21 @@ baby-arb compliance check --upc 123456789012
 baby-arb brief weekly --dry-run
 ```
 
+## Before you push
+
+Every push goes through one gate, and every branch keeps a prompt log:
+
+```bash
+scripts/pre_push.sh      # branch, commits, hygiene, ruff, pytest, bandit, secrets, pip-audit, prompt log
+git add docs/audit/gates/<branch-slug>.md
+git commit -m "chore(audit): record pre-push gate for <sha>"
+git push                 # the pre-push hook refuses a push with no PASS record
+```
+
+See [docs/audit/README.md](docs/audit/README.md) and the skills in
+[docs/skills/dev-lifecycle](docs/skills/dev-lifecycle/SKILL.md),
+[pre-push](docs/skills/pre-push/SKILL.md) and [release](docs/skills/release/SKILL.md).
+
 ## Deploy as a Hermes project
 
 ```bash
@@ -88,7 +102,7 @@ baby-arb brief weekly --dry-run
 """
 Set up the agentic dev team for a new project.
 Project: baby-arb-ke
-Repo: github.com/{{REPO_OWNER}}/baby-arb-ke
+Repo: github.com/ndethi/baby-arb-ke
 
 1. Read SOUL.md and AGENTS.md from the repo root.
 2. Load all skill files from docs/skills/.
