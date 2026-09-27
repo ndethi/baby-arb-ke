@@ -4,7 +4,7 @@
 # - pushes to main/master are refused (use a PR);
 # - tag pushes are allowed (release skill);
 # - branch pushes need a committed PASS entry in docs/audit/gates/<branch-slug>.md for the
-#   latest commit on that branch that touched anything outside docs/audit/.
+#   latest commit on that branch that touched anything outside docs/audit/gates/.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
@@ -18,7 +18,7 @@ while read -r LOCAL_REF LOCAL_SHA REMOTE_REF _; do
   esac
   [ "$LOCAL_SHA" = "0000000000000000000000000000000000000000" ] && continue # branch deletion
   BRANCH="${LOCAL_REF#refs/heads/}"
-  CODE_SHA="$(git log -1 --format=%h "$LOCAL_SHA" -- . ':(exclude)docs/audit')"
+  CODE_SHA="$(git log -1 --format=%h "$LOCAL_SHA" -- . ':(exclude)docs/audit/gates')"
   GATE_LOG="docs/audit/gates/${BRANCH//\//-}.md"
   if git show "$LOCAL_SHA:$GATE_LOG" 2>/dev/null | grep -Eq "^## .* · ${CODE_SHA} · PASS$"; then
     echo "[INFO] $BRANCH: gate record found for $CODE_SHA"

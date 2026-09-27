@@ -31,14 +31,14 @@ branch to leave this machine, and it leaves a committed record that it ran.
    `chore(audit): record pre-push gate for <sha>`
 5. Push. The git `pre-push` hook (`.githooks/pre-push` →
    `scripts/verify_gate_record.sh`) checks for a committed PASS entry matching
-   the latest non-audit commit, and refuses pushes to `main`/`master`.
+   the latest commit outside `docs/audit/gates/`, and refuses pushes to `main`/`master`.
    Hooks are enabled once per clone with `git config core.hooksPath .githooks`.
 
 ## What it checks
 | Check | Blocks | Notes |
 |---|---|---|
 | branch | yes | `task/<slug>`; never `main` |
-| clean-tree | yes | nothing uncommitted outside `docs/audit/` |
+| clean-tree | yes | nothing uncommitted outside `docs/audit/gates/` |
 | commits | yes | every commit since base matches `.cz.toml` `schema_pattern` |
 | hygiene | yes | no tracked backups (`*.bak`, `*.backup*`, `*.orig`), no root-level `.py`, no tracked `.env`, no added file over 1 MB |
 | ruff | yes | changed files in `src/` and `tests/` |

@@ -18,8 +18,8 @@ if [ -z "$BASE" ]; then
 fi
 BRANCH="$(git branch --show-current)"
 SLUG="${BRANCH//\//-}"
-# Last commit touching anything outside docs/audit/ = the code being gated.
-SHA="$(git log -1 --format=%h -- . ':(exclude)docs/audit')"
+# Last commit touching anything outside docs/audit/gates/ = what is being gated.
+SHA="$(git log -1 --format=%h -- . ':(exclude)docs/audit/gates')"
 RUN="poetry run"
 mkdir -p .gate docs/audit/gates
 OUT=".gate/$(date -u +%Y%m%dT%H%M%SZ)-${SLUG}.txt"
@@ -36,7 +36,7 @@ echo "[INFO] gate: branch=$BRANCH sha=$SHA base=$BASE (full output: $OUT)"
   fi
 
   # 2. Clean tree: the gate must test exactly what is committed.
-  DIRTY="$(git status --porcelain -- . ':(exclude)docs/audit' | wc -l | tr -d ' ')"
+  DIRTY="$(git status --porcelain -- . ':(exclude)docs/audit/gates' | wc -l | tr -d ' ')"
   if [ "$DIRTY" = "0" ]; then record clean-tree PASS ""; else record clean-tree FAIL "$DIRTY uncommitted/untracked paths"; fi
 
   # 3. Commit messages

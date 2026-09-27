@@ -38,6 +38,6 @@ Appended automatically; one heading per run:
 | ...
 ```
 
-The SHA is the latest commit that touched anything outside `docs/audit/`, so
+The SHA is the latest commit that touched anything outside `docs/audit/gates/`, so
 committing the record itself does not invalidate it. The pre-push hook looks
 for a `PASS` heading with that SHA before allowing the push.
