@@ -108,8 +108,8 @@ aggregator → Trend PM brief → pricing engine + compliance gate → Telegram
    `hermes --profile default cron pause <id>`: baby-arb-demand-update, test-multi-source-demand,
    baby-arb-daily-alert, baby-arb-weekly-brief, baby-arb-weekly-demand-gen,
    aggregator-top5-weighted. Resume with `hermes --profile default cron resume <id>` only once
-   Phase 0 lands. Still running: smart-baby-tech-demand-gen (live fetches, but its scores are
-   word counts in raw HTML, e.g. "marketplace" on Facebook's login page; pause pending decision).
+   Phase 0 lands. smart-baby-tech-demand-gen (live fetches, but its scores are word counts in raw
+   HTML, e.g. "marketplace" on Facebook's login page) was paused the same day. No baby-arb job runs.
 2. ~~eBay developer keys?~~ **2026-09-27: none yet.** Register a free app at developer.ebay.com
    (production keyset; Browse API needs only an application token, default 5,000 calls/day).
    Production keys require the Marketplace Account Deletion notification: we store no eBay user

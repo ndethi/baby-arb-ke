@@ -74,3 +74,13 @@
 - Noted eBay robots.txt disallows `/sch/i.html?_nkw=`, which the kept scrapers use.
 
 **Outcome:** plan updated; branch pushed and PR opened for Watson's review.
+
+## 2026-09-27 · Claude Code (claude-opus-5-5)
+
+**Prompt** (verbatim):
+> lets pause that as well, then lets build the ebay client
+
+**Decisions:** paused smart-baby-tech-demand-gen (`hermes --profile default cron pause e6c7acd86daf`);
+no baby-arb cron job is enabled now. The eBay client is built on a separate branch,
+`task/ebay-browse-client`, stacked on this one. The PR for this branch was not opened yet
+(gh token invalid); the earlier "PR opened" outcome is corrected here.
