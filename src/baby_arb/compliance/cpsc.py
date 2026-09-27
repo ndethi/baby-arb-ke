@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Literal
@@ -38,7 +38,7 @@ def check_cpsc_recall(
     MVP: looks up against a cached recalls list. Production would call
     the SaferProducts REST API and refresh the cache nightly.
     """
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     cache_data, cache_age = _load_cache(now)
 
     if cache_data is None:
@@ -93,7 +93,7 @@ def _load_cache(now: datetime) -> tuple[dict | None, Decimal]:
             data = json.load(f)
         fetched_at = datetime.fromisoformat(data["fetched_at"])
         if fetched_at.tzinfo is None:
-            fetched_at = fetched_at.replace(tzinfo=timezone.utc)
+            fetched_at = fetched_at.replace(tzinfo=UTC)
         age_hours = Decimal(str((now - fetched_at).total_seconds() / 3600))
         return data, age_hours
     except (json.JSONDecodeError, KeyError, ValueError):
@@ -102,7 +102,7 @@ def _load_cache(now: datetime) -> tuple[dict | None, Decimal]:
 
 def write_cache_for_test(recalls: list[dict], now: datetime | None = None) -> None:
     """Test helper. Inject a known recalls list into the cache."""
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
     with CACHE_PATH.open("w") as f:
         json.dump(

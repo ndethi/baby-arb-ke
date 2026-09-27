@@ -7,7 +7,7 @@ must know the age of the rate it used.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -29,7 +29,7 @@ def get_usdkes_rate(now: datetime | None = None) -> tuple[Decimal, Decimal]:
         FXUnavailable: If no cached rate exists and live fetch fails.
     """
     settings = get_settings()
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
 
     cached = _load_cache()
     if cached is not None:
@@ -95,5 +95,5 @@ def set_cache_for_test(rate: Decimal, fetched_at: datetime) -> None:
     _save_cache(rate, fetched_at)
 
 
-class FXUnavailable(Exception):
+class FXUnavailable(Exception):  # noqa: N818 - public name used by callers
     """No exchange rate could be obtained."""

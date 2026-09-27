@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
-
 from baby_arb.compliance.cpsc import write_cache_for_test
 from baby_arb.models.candidate import BuyCandidate, ItemCategory, ItemCondition
 from baby_arb.pricing.fx import set_cache_for_test
-
 
 FIXTURES_DIR = Path(__file__).parent.parent / "data" / "fixtures"
 
@@ -37,7 +35,7 @@ def isolated_caches(tmp_path, monkeypatch):
 @pytest.fixture
 def now():
     """Fixed `now` for deterministic tests."""
-    return datetime(2026, 5, 10, 12, 0, 0, tzinfo=timezone.utc)
+    return datetime(2026, 5, 10, 12, 0, 0, tzinfo=UTC)
 
 
 @pytest.fixture

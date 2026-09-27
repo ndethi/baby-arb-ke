@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from dateutil.relativedelta import relativedelta
 
@@ -41,7 +41,7 @@ def check_carseat_dom(
     now: datetime | None = None,
 ) -> CarseatResult:
     """Check car seat DOM against the operating ceiling."""
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
 
     dom = candidate.dom_extracted or _extract_dom_from_text(
         candidate.condition_text, now=now
@@ -55,7 +55,7 @@ def check_carseat_dom(
 
     # Ensure dom is timezone-aware for comparison
     if dom.tzinfo is None:
-        dom = dom.replace(tzinfo=timezone.utc)
+        dom = dom.replace(tzinfo=UTC)
 
     age = relativedelta(now, dom)
     age_years = age.years + (age.months / 12)
@@ -91,11 +91,11 @@ def _extract_dom_from_text(text: str, *, now: datetime) -> datetime | None:
                 if len(groups) == 2:
                     month, year = int(groups[0]), int(groups[1])
                     if 1 <= month <= 12 and 2000 <= year <= now.year:
-                        return datetime(year, month, 1, tzinfo=timezone.utc)
+                        return datetime(year, month, 1, tzinfo=UTC)
                 elif len(groups) == 1:
                     year = int(groups[0])
                     if 2000 <= year <= now.year:
-                        return datetime(year, 1, 1, tzinfo=timezone.utc)
+                        return datetime(year, 1, 1, tzinfo=UTC)
             except (ValueError, TypeError):
                 continue
     return None

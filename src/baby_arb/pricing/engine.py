@@ -6,7 +6,7 @@ complete cost picture. No LLM here. No randomness. Deterministic.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from baby_arb.models.candidate import BuyCandidate, ItemCategory
@@ -68,7 +68,7 @@ def calculate_landed_cost(
     Returns:
         Complete LandedCost with all components named and confidence flag.
     """
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
 
     # ── Weight resolution ────────────────────────────────────────────
     if candidate.weight_lb is not None:

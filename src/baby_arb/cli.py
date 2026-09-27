@@ -7,11 +7,9 @@ are stubbed with informative messages.
 
 from __future__ import annotations
 
-import json
-import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 from rich.console import Console
@@ -19,8 +17,8 @@ from rich.panel import Panel
 from rich.table import Table
 
 from baby_arb import __version__
-from baby_arb.compliance.gate import gate as compliance_gate
 from baby_arb.compliance.cpsc import write_cache_for_test
+from baby_arb.compliance.gate import gate as compliance_gate
 from baby_arb.demand.aggregator import compose_signal
 from baby_arb.models.candidate import BuyCandidate, ItemCategory, ItemCondition
 from baby_arb.models.demand import DemandSignals
@@ -62,7 +60,7 @@ def health() -> None:
     confirms compliance gate is callable, and reports config sanity.
     """
     from baby_arb.config import get_settings
-    from baby_arb.pricing.rules import MARGIN_FLOOR_PCT, ENGINE_VERSION
+    from baby_arb.pricing.rules import ENGINE_VERSION, MARGIN_FLOOR_PCT
 
     settings = get_settings()
     table = Table(title="baby-arb-ke health")
@@ -107,7 +105,7 @@ def price_smoke(
     No network required. Uses cached FX rate (injected for the test).
     """
     # Inject FX rate so we don't need network
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     set_cache_for_test(Decimal(str(fx_rate)), now)
 
     candidate = BuyCandidate(
@@ -216,9 +214,9 @@ def compliance_smoke(
 
 @compliance_app.command("check")
 def compliance_check(
-    upc: Annotated[Optional[str], typer.Option(help="UPC code")] = None,
-    brand: Annotated[Optional[str], typer.Option(help="Brand")] = None,
-    model: Annotated[Optional[str], typer.Option(help="Model")] = None,
+    upc: Annotated[str | None, typer.Option(help="UPC code")] = None,
+    brand: Annotated[str | None, typer.Option(help="Brand")] = None,
+    model: Annotated[str | None, typer.Option(help="Model")] = None,
 ) -> None:
     """Lightweight CPSC + safety check by UPC or brand+model."""
     if not (upc or (brand and model)):
@@ -286,9 +284,9 @@ def demand_score(
 @demand_app.command("check")
 def demand_check(
     name: Annotated[str, typer.Argument(help="Product name to check demand for")],
-    brand: Annotated[Optional[str], typer.Option(help="Brand name")] = None,
-    model: Annotated[Optional[str], typer.Option(help="Model name")] = None,
-    category: Annotated[Optional[str], typer.Option(help="Category")] = None,
+    brand: Annotated[str | None, typer.Option(help="Brand name")] = None,
+    model: Annotated[str | None, typer.Option(help="Model name")] = None,
+    category: Annotated[str | None, typer.Option(help="Category")] = None,
     dry_run: Annotated[bool, typer.Option(help="Use demo data instead of real APIs/scraping")] = True,
     jiji: Annotated[bool, typer.Option(help="Include Jiji signals")] = True,
     facebook: Annotated[bool, typer.Option(help="Include Facebook signals")] = True,
@@ -303,9 +301,9 @@ def demand_check(
     import asyncio
     
     async def _collect_signals() -> DemandSignals:
-        from baby_arb.demand.collectors.jiji import JijiCollector
         from baby_arb.demand.collectors.facebook import FacebookCollector
         from baby_arb.demand.collectors.instagram_public import InstagramPublicCollector
+        from baby_arb.demand.collectors.jiji import JijiCollector
         from baby_arb.demand.collectors.tiktok_public import TikTokPublicCollector
         
         signals = DemandSignals()
@@ -392,6 +390,7 @@ def brief_weekly(
 ) -> None:
     """Generate the weekly sourcing brief."""
     import asyncio
+
     from devops.sourcing_brief_implementation import generate_sourcing_brief
     
     # Run the async brief generation
