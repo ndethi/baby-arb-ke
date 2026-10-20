@@ -287,99 +287,52 @@ def demand_check(
     brand: Annotated[str | None, typer.Option(help="Brand name")] = None,
     model: Annotated[str | None, typer.Option(help="Model name")] = None,
     category: Annotated[str | None, typer.Option(help="Category")] = None,
-    dry_run: Annotated[bool, typer.Option(help="Use demo data instead of real APIs/scraping")] = True,
     jiji: Annotated[bool, typer.Option(help="Include Jiji signals")] = True,
     facebook: Annotated[bool, typer.Option(help="Include Facebook signals")] = True,
     instagram: Annotated[bool, typer.Option(help="Include Instagram public signals")] = True,
     tiktok: Annotated[bool, typer.Option(help="Include TikTok public signals")] = True,
 ) -> None:
-    """Check demand signals using API collectors and public search.
-    
-    By default runs in dry_run mode (demo data). Set --dry-run=false to use real APIs/scraping
-    (requires network access, API keys may be needed for some sources).
+    """Check demand signals from the KE collectors.
+
+    Sources that are not built or fail are reported as UNKNOWN with a reason;
+    no demo values are substituted.
     """
     import asyncio
-    
-    async def _collect_signals() -> DemandSignals:
-        from baby_arb.demand.collectors.facebook import FacebookCollector
-        from baby_arb.demand.collectors.instagram_public import InstagramPublicCollector
-        from baby_arb.demand.collectors.jiji import JijiCollector
-        from baby_arb.demand.collectors.tiktok_public import TikTokPublicCollector
-        
-        signals = DemandSignals()
-        collectors = []
-        
-        if jiji:
-            collectors.append(("jiji", JijiCollector()))
-        if facebook:
-            collectors.append(("facebook", FacebookCollector()))
-        if instagram:
-            collectors.append(("instagram_public", InstagramPublicCollector()))
-        if tiktok:
-            collectors.append(("tiktok_public", TikTokPublicCollector()))
-        
-        # Run collectors concurrently
-        tasks = []
-        for collector_name, collector in collectors:
-            task = asyncio.create_task(
-                collector.collect(name, brand=brand, model=model, category=category)
-            )
-            tasks.append((collector_name, task))
-        
-        # Wait for all to complete
-        for collector_name, task in tasks:
-            try:
-                collector_signals = await task
-                # Merge signals (non-None values overwrite)
-                for field in collector_signals.__class__.model_fields:
-                    if field not in ["entered_by", "entered_at"]:  # Skip metadata
-                        value = getattr(collector_signals, field)
-                        if value is not None:
-                            setattr(signals, field, value)
-                    else:
-                        # Keep track of which collector provided the data
-                        if value is not None:
-                            current = getattr(signals, field)
-                            if current is None or current == "manual":
-                                setattr(signals, field, value)
-            except Exception as e:
-                console.print(f"[yellow]Warning: {collector_name} collector failed: {e}[/yellow]")
-                # Continue with whatever we have
-        
-        return signals
-    
-    # Run the async collection
-    signals = asyncio.run(_collect_signals())
-    
-    # If dry_run and we have no real data, supplement with demo data
-    if dry_run and (signals.jiji_active_listings is None and signals.fb_group_mentions_30d is None 
-                    and signals.ig_kenyan_mentions_30d is None and signals.tiktok_kenyan_mentions_30d is None):
-        console.print("[dim]Running in dry-run mode with demo data[/dim]")
-        # Add some demo data so we have something to show
-        if signals.jiji_active_listings is None:
-            signals.jiji_active_listings = 5
-            signals.jiji_sold_30d = 3
-            signals.jiji_median_sold_kes = Decimal("7500")
-        if signals.fb_group_mentions_30d is None:
-            signals.fb_group_mentions_30d = 25
-            signals.fb_group_intent_score = Decimal("0.6")
-        if signals.ig_kenyan_mentions_30d is None:
-            signals.ig_kenyan_mentions_30d = 30
-        if signals.tiktok_kenyan_mentions_30d is None:
-            signals.tiktok_kenyan_mentions_30d = 15000
-    
-    # Compose the final signal
+
+    from baby_arb.demand.collect import collect_signals
+    from baby_arb.demand.collectors import (
+        BaseCollector,
+        FacebookCollector,
+        InstagramPublicCollector,
+        JijiCollector,
+        TikTokPublicCollector,
+    )
+
+    selected: list[BaseCollector] = []
+    if jiji:
+        selected.append(JijiCollector())
+    if facebook:
+        selected.append(FacebookCollector())
+    if instagram:
+        selected.append(InstagramPublicCollector())
+    if tiktok:
+        selected.append(TikTokPublicCollector())
+
+    signals = asyncio.run(
+        collect_signals(name, selected, brand=brand, model=model, category=category)
+    )
     sig = compose_signal(name, signals, brand=brand, model=model, category=category)
-    
-    # Display results
+
     table = Table(title=f"Demand signal check: {name}")
     table.add_column("Field")
     table.add_column("Value")
-    table.add_row("demand_score", f"{sig.demand_score:.3f}")
+    unknown = sig.confidence == "UNKNOWN"
+    table.add_row("demand_score", "UNKNOWN" if unknown else f"{sig.demand_score:.3f}")
     table.add_row("confidence", sig.confidence)
     table.add_row("recommendation", sig.recommendation or "")
     table.add_row("missing_data", ", ".join(sig.missing_data) or "—")
-    table.add_row("data_source", f"{'demo' if dry_run else 'live'} sources")
+    for source, reason in sorted(signals.unknown_reasons.items()):
+        table.add_row(f"UNKNOWN: {source}", reason)
     console.print(table)
 
 
