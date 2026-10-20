@@ -5,145 +5,98 @@ Checks demand for key baby products using multiple sources and sends summary to 
 """
 
 import asyncio
-import sys
-from decimal import Decimal
 import os
+import sys
 
 # Add src to path
 sys.path.insert(0, 'src')
 
-from baby_arb.cli import app
-import typer
 from rich.console import Console
 
 console = Console()
 
+PRODUCTS = ["Baby Stroller", "Car Seat", "Baby Toy", "Baby Clothes", "Baby Monitor"]
+
+
 async def check_demand_for_products():
-    """Check demand for a list of key baby products using all available sources."""
-    products = [
-        ("Baby Stroller", None, None, None),
-        ("Car Seat", None, None, None),
-        ("Baby Toy", None, None, None),
-        ("Baby Clothes", None, None, None),
-        ("Baby Monitor", None, None, None),
-    ]
-    
+    """Check demand for key baby products using the KE collectors.
+
+    Sources that are not built or fail stay UNKNOWN with a reason; nothing
+    is filled in with demo values.
+    """
+    from baby_arb.demand.aggregator import compose_signal
+    from baby_arb.demand.collect import collect_signals, default_collectors
+
     results = []
-    
-    for name, brand, model, category in products:
+    for name in PRODUCTS:
         try:
-            # Import collectors
-            from baby_arb.demand.collectors.jiji import JijiCollector
-            from baby_arb.demand.collectors.facebook import FacebookCollector
-            from baby_arb.demand.collectors.instagram_public import InstagramPublicCollector
-            from baby_arb.demand.collectors.tiktok_public import TikTokPublicCollector
-            from baby_arb.demand.aggregator import compose_signal
-            from baby_arb.models.demand import DemandSignals
-            
-            signals = DemandSignals()
-            collectors = []
-            
-            # Use all available collectors for comprehensive signal gathering
-            collectors.append(("jiji", JijiCollector()))
-            collectors.append(("facebook", FacebookCollector()))
-            collectors.append(("instagram", InstagramPublicCollector()))
-            collectors.append(("tiktok", TikTokPublicCollector()))
-            
-            # Run collectors concurrently
-            tasks = []
-            for collector_name, collector in collectors:
-                task = asyncio.create_task(
-                    collector.collect(name, brand=brand, model=model, category=category)
-                )
-                tasks.append((collector_name, task))
-            
-            # Wait for all to complete
-            for collector_name, task in tasks:
-                try:
-                    collector_signals = await task
-                    # Merge signals (non-None values overwrite)
-                    for field in collector_signals.__class__.model_fields:
-                        if field not in ["entered_by", "entered_at"]:  # Skip metadata
-                            value = getattr(collector_signals, field)
-                            if value is not None:
-                                setattr(signals, field, value)
-                except Exception as e:
-                    # Continue with whatever we have from other collectors
-                    console.print(f"[yellow]Warning: {collector_name} collector failed: {e}[/yellow]")
-                    pass
-            
-            # If we have minimal data from all sources, enhance with some demo data
-            # This ensures we always have something to show even if collection is spotty
-            has_any_data = any([
-                signals.jiji_active_listings is not None,
-                signals.fb_group_mentions_30d is not None,
-                signals.ig_kenyan_mentions_30d is not None,
-                signals.tiktok_kenyan_mentions_30d is not None
-            ])
-            
-            if not has_any_data:
-                console.print("[dim]Running with baseline demo data[/dim]")
-                # Set baseline values for demonstration
-                signals.jiji_active_listings = 5
-                signals.jiji_sold_30d = 3
-                signals.jiji_median_sold_kes = Decimal("7500")
-                signals.fb_group_mentions_30d = 25
-                signals.fb_group_intent_score = Decimal("0.6")
-                signals.ig_kenyan_mentions_30d = 30
-                signals.tiktok_kenyan_mentions_30d = 15000
-            
-            # Compose the final signal
-            sig = compose_signal(name, signals, brand=brand, model=model, category=category)
-            
+            signals = await collect_signals(name, default_collectors())
+            sig = compose_signal(name, signals)
             results.append({
                 "product": name,
                 "score": float(sig.demand_score),
                 "confidence": sig.confidence,
                 "recommendation": sig.recommendation or "",
                 "missing": len(sig.missing_data),
-                "sources_used": [name for name, _ in collectors if hasattr(signals, f"{name}_active_listings") or 
-                               hasattr(signals, f"{name}_group_mentions_30d") or 
-                               hasattr(signals, f"{name}_kenyan_mentions_30d")]
+                "unknown_reasons": dict(signals.unknown_reasons),
             })
-            
         except Exception as e:
-            # If anything fails, add a placeholder result
             results.append({
                 "product": name,
-                "score": 0.0,
+                "score": None,
                 "confidence": "ERROR",
                 "recommendation": f"Check failed: {str(e)[:50]}",
                 "missing": 0,
-                "sources_used": []
+                "unknown_reasons": {},
             })
-    
+
     return results
 
+
 def format_telegram_message(results):
-    """Format results as a Telegram message."""
+    """Format results as a Telegram message.
+
+    Products without any live signal are listed as UNKNOWN with the reasons,
+    never with a score.
+    """
     message = "Baby Arb KE Demand Report\n"
     message += "Multi-source signal analysis\n\n"
-    
+
+    scored = [r for r in results if r["confidence"] not in ("UNKNOWN", "ERROR")]
+    if not scored:
+        message += "No live demand data for any product.\n\n"
+
     for result in results:
-        score = result["score"]
         confidence = result["confidence"]
-        
-        # Score category based on demand strength
+        if confidence in ("UNKNOWN", "ERROR"):
+            message += f"{confidence} {result['product']}\n"
+            message += f"   {result['recommendation']}\n\n"
+            continue
+
+        score = result["score"]
         if score >= 0.7:
             score_category = "STRONG"
         elif score >= 0.4:
             score_category = "MODERATE"
         else:
             score_category = "WEAK"
-            
+
         message += f"{score_category} {result['product']} ({confidence})\n"
         message += f"   Score: {score:.3f}\n"
         message += f"   Action: {score_category} — {result['recommendation']}\n"
-        message += f"   Sources: {', '.join(result['sources_used']) or 'none'}\n"
         if result["missing"] > 0:
             message += f"   Missing data: {result['missing']} signal types\n"
         message += "\n"
-    
+
+    reasons = {}
+    for result in results:
+        reasons.update(result["unknown_reasons"])
+    if reasons:
+        message += "UNKNOWN sources:\n"
+        for source, reason in sorted(reasons.items()):
+            message += f"- {source}: {reason}\n"
+        message += "\n"
+
     message += "_Generated by baby-arb-ke demand monitor_"
     return message
 
