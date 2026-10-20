@@ -96,7 +96,7 @@ aggregator → Trend PM brief → pricing engine + compliance gate → Telegram
 
 | Phase | Work | Exit criterion |
 |---|---|---|
-| 0. Stop fabricated signals | Collectors return UNKNOWN instead of demo values; alerts say "no live data" where true; Watson decides whether to pause the demo-fed cron jobs | No `*_demo` values reach Telegram |
+| 0. Stop fabricated signals | Collectors return UNKNOWN instead of demo values; alerts say "no live data" where true; Watson decides whether to pause the demo-fed cron jobs. **Built 2026-10-20 on `task/phase0-no-demo-data`** (collectors, CLI, demand scripts, tracker fallbacks, aggregator_top5, priority sourcer, alert/brief cache + FX guards); crons stay paused until it merges | No `*_demo` values reach Telegram |
 | 1. US supply | eBay Browse API client + storage layer (HANDOFF 1-2) | `baby-arb collect --source ebay` stores observations for the watchlist |
 | 2. KE demand | Jiji spike (URL scheme, rendering, block rate), then snapshot collector + derive; Jumia reference prices | 14 days of snapshots; sold-30d proxy and median price per watchlist item |
 | 3. Rewire | Cron jobs call the CLI from the live worktree; move `scripts/scrape_*` and `collect_multi_source` behind the CLI, remove demo paths; weekly brief resumes on real data | Brief lists items with provenance, or says why it can't |
