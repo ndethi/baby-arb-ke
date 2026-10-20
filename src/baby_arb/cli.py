@@ -7,11 +7,9 @@ are stubbed with informative messages.
 
 from __future__ import annotations
 
-import json
-import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 from rich.console import Console
@@ -19,8 +17,8 @@ from rich.panel import Panel
 from rich.table import Table
 
 from baby_arb import __version__
-from baby_arb.compliance.gate import gate as compliance_gate
 from baby_arb.compliance.cpsc import write_cache_for_test
+from baby_arb.compliance.gate import gate as compliance_gate
 from baby_arb.demand.aggregator import compose_signal
 from baby_arb.models.candidate import BuyCandidate, ItemCategory, ItemCondition
 from baby_arb.models.demand import DemandSignals
@@ -62,7 +60,7 @@ def health() -> None:
     confirms compliance gate is callable, and reports config sanity.
     """
     from baby_arb.config import get_settings
-    from baby_arb.pricing.rules import MARGIN_FLOOR_PCT, ENGINE_VERSION
+    from baby_arb.pricing.rules import ENGINE_VERSION, MARGIN_FLOOR_PCT
 
     settings = get_settings()
     table = Table(title="baby-arb-ke health")
@@ -107,7 +105,7 @@ def price_smoke(
     No network required. Uses cached FX rate (injected for the test).
     """
     # Inject FX rate so we don't need network
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     set_cache_for_test(Decimal(str(fx_rate)), now)
 
     candidate = BuyCandidate(
@@ -216,9 +214,9 @@ def compliance_smoke(
 
 @compliance_app.command("check")
 def compliance_check(
-    upc: Annotated[Optional[str], typer.Option(help="UPC code")] = None,
-    brand: Annotated[Optional[str], typer.Option(help="Brand")] = None,
-    model: Annotated[Optional[str], typer.Option(help="Model")] = None,
+    upc: Annotated[str | None, typer.Option(help="UPC code")] = None,
+    brand: Annotated[str | None, typer.Option(help="Brand")] = None,
+    model: Annotated[str | None, typer.Option(help="Model")] = None,
 ) -> None:
     """Lightweight CPSC + safety check by UPC or brand+model."""
     if not (upc or (brand and model)):
@@ -283,33 +281,132 @@ def demand_score(
     console.print(table)
 
 
+@demand_app.command("check")
+def demand_check(
+    name: Annotated[str, typer.Argument(help="Product name to check demand for")],
+    brand: Annotated[str | None, typer.Option(help="Brand name")] = None,
+    model: Annotated[str | None, typer.Option(help="Model name")] = None,
+    category: Annotated[str | None, typer.Option(help="Category")] = None,
+    dry_run: Annotated[bool, typer.Option(help="Use demo data instead of real APIs/scraping")] = True,
+    jiji: Annotated[bool, typer.Option(help="Include Jiji signals")] = True,
+    facebook: Annotated[bool, typer.Option(help="Include Facebook signals")] = True,
+    instagram: Annotated[bool, typer.Option(help="Include Instagram public signals")] = True,
+    tiktok: Annotated[bool, typer.Option(help="Include TikTok public signals")] = True,
+) -> None:
+    """Check demand signals using API collectors and public search.
+    
+    By default runs in dry_run mode (demo data). Set --dry-run=false to use real APIs/scraping
+    (requires network access, API keys may be needed for some sources).
+    """
+    import asyncio
+    
+    async def _collect_signals() -> DemandSignals:
+        from baby_arb.demand.collectors.facebook import FacebookCollector
+        from baby_arb.demand.collectors.instagram_public import InstagramPublicCollector
+        from baby_arb.demand.collectors.jiji import JijiCollector
+        from baby_arb.demand.collectors.tiktok_public import TikTokPublicCollector
+        
+        signals = DemandSignals()
+        collectors = []
+        
+        if jiji:
+            collectors.append(("jiji", JijiCollector()))
+        if facebook:
+            collectors.append(("facebook", FacebookCollector()))
+        if instagram:
+            collectors.append(("instagram_public", InstagramPublicCollector()))
+        if tiktok:
+            collectors.append(("tiktok_public", TikTokPublicCollector()))
+        
+        # Run collectors concurrently
+        tasks = []
+        for collector_name, collector in collectors:
+            task = asyncio.create_task(
+                collector.collect(name, brand=brand, model=model, category=category)
+            )
+            tasks.append((collector_name, task))
+        
+        # Wait for all to complete
+        for collector_name, task in tasks:
+            try:
+                collector_signals = await task
+                # Merge signals (non-None values overwrite)
+                for field in collector_signals.__class__.model_fields:
+                    if field not in ["entered_by", "entered_at"]:  # Skip metadata
+                        value = getattr(collector_signals, field)
+                        if value is not None:
+                            setattr(signals, field, value)
+                    else:
+                        # Keep track of which collector provided the data
+                        if value is not None:
+                            current = getattr(signals, field)
+                            if current is None or current == "manual":
+                                setattr(signals, field, value)
+            except Exception as e:
+                console.print(f"[yellow]Warning: {collector_name} collector failed: {e}[/yellow]")
+                # Continue with whatever we have
+        
+        return signals
+    
+    # Run the async collection
+    signals = asyncio.run(_collect_signals())
+    
+    # If dry_run and we have no real data, supplement with demo data
+    if dry_run and (signals.jiji_active_listings is None and signals.fb_group_mentions_30d is None 
+                    and signals.ig_kenyan_mentions_30d is None and signals.tiktok_kenyan_mentions_30d is None):
+        console.print("[dim]Running in dry-run mode with demo data[/dim]")
+        # Add some demo data so we have something to show
+        if signals.jiji_active_listings is None:
+            signals.jiji_active_listings = 5
+            signals.jiji_sold_30d = 3
+            signals.jiji_median_sold_kes = Decimal("7500")
+        if signals.fb_group_mentions_30d is None:
+            signals.fb_group_mentions_30d = 25
+            signals.fb_group_intent_score = Decimal("0.6")
+        if signals.ig_kenyan_mentions_30d is None:
+            signals.ig_kenyan_mentions_30d = 30
+        if signals.tiktok_kenyan_mentions_30d is None:
+            signals.tiktok_kenyan_mentions_30d = 15000
+    
+    # Compose the final signal
+    sig = compose_signal(name, signals, brand=brand, model=model, category=category)
+    
+    # Display results
+    table = Table(title=f"Demand signal check: {name}")
+    table.add_column("Field")
+    table.add_column("Value")
+    table.add_row("demand_score", f"{sig.demand_score:.3f}")
+    table.add_row("confidence", sig.confidence)
+    table.add_row("recommendation", sig.recommendation or "")
+    table.add_row("missing_data", ", ".join(sig.missing_data) or "—")
+    table.add_row("data_source", f"{'demo' if dry_run else 'live'} sources")
+    console.print(table)
+
+
 # ── brief ───────────────────────────────────────────────────────────
 @brief_app.command("weekly")
 def brief_weekly(
     dry_run: Annotated[bool, typer.Option(help="Don't post to Telegram")] = True,
 ) -> None:
-    """Generate the weekly sourcing brief.
+    """Generate the weekly sourcing brief."""
+    import asyncio
 
-    Status: stub. Hermes runs this for real once the pieces are wired:
-      1. read latest Demand Scout output from data/cache/demand_scout/
-      2. read last 4 weeks of margin reports
-      3. compose the brief per docs/skills/trend-pm/SKILL.md
-      4. post to Telegram
-      5. open PR with the brief markdown
-    """
-    console.print(
-        Panel(
-            "[yellow]Brief generation runs through Hermes in MVP.[/yellow]\n\n"
-            "Send to Hermes on Telegram:\n"
-            "  [bold]Run the weekly sourcing brief[/bold]\n\n"
-            "Or after wiring src/baby_arb/sourcing and a Demand Scout cache, "
-            "this command will compose and post the brief locally.",
-            title="brief weekly",
-        )
-    )
-
-
-# ── db ──────────────────────────────────────────────────────────────
+    from devops.sourcing_brief_implementation import generate_sourcing_brief
+    
+    # Run the async brief generation
+    brief_content = asyncio.run(generate_sourcing_brief(dry_run=dry_run))
+    
+    # Output the brief
+    console.print(brief_content)
+    
+    # If not dry run, we would post to Telegram and create PR
+    if not dry_run:
+        console.print("[green]Brief would be posted to Telegram and PR created[/green]")
+        console.print("In full implementation, this would:")
+        console.print("  1. Send to Telegram via bot")
+        console.print("  2. Create git branch: task/weekly-brief-YYYY-MM-DD") 
+        console.print("  3. Commit with: docs(brief): weekly sourcing brief YYYY-MM-DD")
+        console.print("  4. Open PR for review")
 @db_app.command("init")
 def db_init() -> None:
     """Initialise the SQLite database. (Stub — Hermes handoff.)"""

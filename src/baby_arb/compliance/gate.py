@@ -6,12 +6,12 @@ Final verdict is the strictest seen.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from baby_arb.compliance.authenticity import check_authenticity
 from baby_arb.compliance.carseat import check_carseat_dom
-from baby_arb.compliance.cpsc import CPSCResult, check_cpsc_recall
+from baby_arb.compliance.cpsc import check_cpsc_recall
 from baby_arb.compliance.kebs import check_kebs_restricted
 from baby_arb.compliance.rules import SAFETY_BLOCK_KEYWORDS
 from baby_arb.models.candidate import BuyCandidate, ItemCategory
@@ -34,7 +34,7 @@ def gate(
     Returns:
         ComplianceVerdict with PASS, BLOCK, or REVIEW.
     """
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     reasons: list[str] = []
     checks_run: list[str] = []
     checks_skipped: list[str] = []

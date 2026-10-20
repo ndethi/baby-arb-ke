@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     telegram_bot_token: str | None = None
     telegram_chat_id: str | None = None
 
+    # Demand APIs
+    jiji_api_key: str | None = None
+    facebook_app_id: str | None = None
+    facebook_app_secret: str | None = None
+    facebook_access_token: str | None = None
+
     # Storage
     database_url: str = "sqlite:///./data/baby_arb.db"
 

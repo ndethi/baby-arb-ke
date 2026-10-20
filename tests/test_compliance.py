@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from decimal import Decimal
 
-import pytest
-
-from baby_arb.compliance.gate import gate
 from baby_arb.compliance.authenticity import check_authenticity
 from baby_arb.compliance.carseat import check_carseat_dom
-from baby_arb.compliance.cpsc import check_cpsc_recall, write_cache_for_test
+from baby_arb.compliance.cpsc import check_cpsc_recall
+from baby_arb.compliance.gate import gate
 from baby_arb.compliance.kebs import check_kebs_restricted
-from baby_arb.models.candidate import BuyCandidate, ItemCategory, ItemCondition
 from baby_arb.models.compliance import ComplianceVerdictKind
 
 

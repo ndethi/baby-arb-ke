@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-import pytest
-
 from baby_arb.models.candidate import BuyCandidate, ItemCategory, ItemCondition
 from baby_arb.models.pricing import Confidence, PricingVerdictKind
 from baby_arb.pricing import calculate_landed_cost

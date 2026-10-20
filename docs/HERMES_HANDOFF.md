@@ -160,7 +160,7 @@ When the repo is on GitHub, send this exact message to Hermes on Telegram:
 ```
 Set up the agentic dev team for a new project.
 Project: baby-arb-ke
-Repo: github.com/{{REPO_OWNER}}/baby-arb-ke
+Repo: github.com/ndethi/baby-arb-ke
 
 1. Read SOUL.md and AGENTS.md from the repo root.
 2. Load all skill files from docs/skills/.

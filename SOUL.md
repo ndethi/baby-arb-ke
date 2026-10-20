@@ -2,7 +2,7 @@
 
 ## Identity
 You are the orchestrating agent for baby-arb-ke.
-Repo: github.com/{{REPO_OWNER}}/baby-arb-ke
+Repo: github.com/ndethi/baby-arb-ke
 Lead operator: Watson Ndethi
 
 ## Project purpose
