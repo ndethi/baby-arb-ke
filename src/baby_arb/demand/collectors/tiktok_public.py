@@ -9,6 +9,10 @@ from baby_arb.models.demand import DemandSignals
 
 logger = structlog.get_logger()
 
+NOT_BUILT_REASON = (
+    "TikTok public search not built; needs Apify/Phyllo (docs/live_scraping_plan.md Phase 4)"
+)
+
 
 class TikTokPublicCollector(BaseCollector):
     """Collect demand signals from TikTok using public search (no login)."""
@@ -19,7 +23,7 @@ class TikTokPublicCollector(BaseCollector):
         # Common Kenyan baby-related hashtags to start with
         self.priority_hashtags = [
             "#babydeclutteringke",
-            "#secondhandbabyke", 
+            "#secondhandbabyke",
             "#mombusinesske",
             "#babyclotheske",
             "#babytoyske",
@@ -27,53 +31,14 @@ class TikTokPublicCollector(BaseCollector):
             "#carseatke",
             "#babygearke",
             "#handmedownske",
-            "#babyfashionke"
+            "#babyfashionke",
         ]
 
     async def collect(self, product_name: str, **kwargs) -> DemandSignals:
         """Collect demand signals from TikTok public search.
 
-        For MVP, we'll return enhanced demo data based on hashtag research.
-
-        Returns:
-            DemandSignals with TikTok-specific public data
+        Returns UNKNOWN until a provider (Apify/Phyllo) is wired in Phase 4.
+        Never returns placeholder mention counts.
         """
         self.logger.info("Collecting TikTok public signals", product=product_name)
-
-        signals = DemandSignals()
-        product_lower = product_name.lower()
-
-        # Enhanced demo logic based on product type and hashtag research
-        # This simulates what we would get from actual TikTok scraping
-        if "stroller" in product_lower or "pushchair" in product_lower:
-            # Strong signal: baby strollers trending on TikTok KE
-            signals.tiktok_kenyan_mentions_30d = 12500  # Video views or mentions
-            signals.entered_by = "tiktok_public_demo"
-        elif "car seat" in product_lower:
-            # Moderate signal: safety content gets views but less resale focus
-            signals.tiktok_kenyan_mentions_30d = 4200
-            signals.entered_by = "tiktok_public_demo"
-        elif "toy" in product_lower or "game" in product_lower:
-            # Very strong signal: toy content highly engaging and shareable
-            signals.tiktok_kenyan_mentions_30d = 28000
-            signals.entered_by = "tiktok_public_demo"
-        elif "cloth" in product_lower or "apparel" in product_lower:
-            # Strong signal: fashion content performs well
-            signals.tiktok_kenyan_mentions_30d = 18500
-            signals.entered_by = "tiktok_public_demo"
-        elif "monitor" in product_lower or "tech" in product_lower:
-            # Growing signal: baby tech niche but increasing
-            signals.tiktok_kenyan_mentions_30d = 6800
-            signals.entered_by = "tiktok_public_demo"
-        else:
-            # Generic demo data with slight variation
-            signals.tiktok_kenyan_mentions_30d = 8500
-            signals.entered_by = "tiktok_public_demo"
-
-        # Add some variance to make it more realistic
-        import random
-        variance = random.uniform(-0.15, 0.15)
-        views_float = float(signals.tiktok_kenyan_mentions_30d) * (1 + variance)
-        signals.tiktok_kenyan_mentions_30d = int(max(1000, views_float))
-        
-        return signals
+        return self._unknown(NOT_BUILT_REASON)

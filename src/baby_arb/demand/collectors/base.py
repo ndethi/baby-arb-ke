@@ -60,3 +60,12 @@ class BaseCollector(ABC):
     def _create_empty_signals(self) -> DemandSignals:
         """Create an empty DemandSignals object."""
         return DemandSignals()
+
+    def _unknown(self, reason: str) -> DemandSignals:
+        """Return signals with no values and the reason this source is UNKNOWN.
+
+        Collectors must use this instead of inventing values when a source is
+        not built, blocked or failed.
+        """
+        self.logger.info("Source UNKNOWN", reason=reason)
+        return DemandSignals(entered_by=self.name, unknown_reasons={self.name: reason})
