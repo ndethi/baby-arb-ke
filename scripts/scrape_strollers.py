@@ -10,34 +10,15 @@ and updates a tracker CSV.
 Similar structure to the breast-pump-tracker but for strollers.
 """
 
-import json
 import re
 import csv
 import os
-import asyncio
 from datetime import datetime
 from urllib.parse import quote_plus
-from decimal import Decimal
 import subprocess
 import requests
 import sys
 import structlog
-
-# Add the src directory to the path for importing demand collectors
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src'))
-
-# Import demand collectors
-try:
-    from baby_arb.demand.collectors.base import BaseCollector
-    from baby_arb.demand.collectors.jiji import JijiCollector
-    from baby_arb.demand.collectors.facebook import FacebookCollector
-    from baby_arb.demand.collectors.instagram_public import InstagramPublicCollector
-    from baby_arb.demand.collectors.tiktok_public import TikTokPublicCollector
-    from baby_arb.demand.aggregator import compose_signal
-    from baby_arb.models.demand import DemandSignals
-    COLLECTORS_AVAILABLE = True
-except ImportError:
-    COLLECTORS_AVAILABLE = False
 
 logger = structlog.get_logger()
 
@@ -245,70 +226,6 @@ def fetch_instagram_content(hashtag, limit=10):
     
     return posts
 
-async def collect_multi_source_stroller_signals():
-    """
-    Collect stroller demand signals from multiple public sources.
-    Returns aggregated demand signals.
-    """
-    if not COLLECTORS_AVAILABLE:
-        return {
-            "product": "baby stroller",
-            "demand_score": 0.55,
-            "confidence": "MEDIUM",
-            "recommendation": "WATCH",
-            "source_status": {
-                "tiktok": "attempted",
-                "instagram": "attempted",
-                "forums": "attempted",
-                "reddit": "attempted"
-            }
-        }
-    
-    # Initialize collectors
-    collectors = {
-        "jiji": JijiCollector(),
-        "facebook": FacebookCollector(),
-        "instagram": InstagramPublicCollector(),
-        "tiktok": TikTokPublicCollector(),
-    }
-    
-    product_name = "baby stroller"
-    signals = DemandSignals()
-    source_status = {}
-    
-    for source_name, collector in collectors.items():
-        try:
-            collector_signals = await collector.collect(product_name)
-            for field in collector_signals.__class__.model_fields:
-                if field not in ["entered_by", "entered_at"]:
-                    value = getattr(collector_signals, field)
-                    if value is not None:
-                        setattr(signals, field, value)
-            source_status[source_name] = "success"
-        except Exception as e:
-            logger.warning(f"Collector {source_name} failed for {product_name}", error=str(e))
-            source_status[source_name] = f"failed: {str(e)}"
-    
-    try:
-        product_signal = compose_signal(product_name, signals)
-        demand_score = float(product_signal.demand_score)
-        confidence = product_signal.confidence.value if hasattr(product_signal.confidence, 'value') else str(product_signal.confidence)
-        recommendation = product_signal.recommendation.value if hasattr(product_signal.recommendation, 'value') else str(product_signal.recommendation)
-    except Exception as e:
-        logger.error(f"Failed to compose signal for {product_name}", error=str(e))
-        demand_score = 0.55
-        confidence = "MEDIUM"
-        recommendation = "WATCH"
-    
-    return {
-        "product": product_name,
-        "demand_score": demand_score,
-        "confidence": confidence,
-        "recommendation": recommendation,
-        "source_status": source_status,
-        "signals": signals
-    }
-
 def main():
     print(f"🕒 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Multi-Source Baby Stroller Scan")
 
@@ -452,49 +369,7 @@ def main():
     except Exception as e:
         logger.warning("reddit_rss_fallback_failed", error=str(e))
 
-    # If no specific models found, use demand signals to weight known popular models
-    if not model_scores:
-        print("⚠️  No specific models found in content. Using demand-weighted popular models...")
-        # Popular stroller models with base popularity scores
-        popular_models = {
-            "UPPAbaby Vista": {"base_score": 90, "demand_boost": 0},
-            "UPPAbaby CRUZ": {"base_score": 85, "demand_boost": 0},
-            "Bugaboo Cameleon3": {"base_score": 82, "demand_boost": 0},
-            "Chicco Bravo": {"base_score": 75, "demand_boost": 0},
-            "Graco Modes": {"base_score": 72, "demand_boost": 0},
-            "Baby Jogger City Select": {"base_score": 70, "demand_boost": 0},
-            "Mockingbird": {"base_score": 68, "demand_boost": 0},
-            "Doona": {"base_score": 65, "demand_boost": 0},
-            "Nuna MIXX": {"base_score": 62, "demand_boost": 0},
-            "gb Pockit": {"base_score": 55, "demand_boost": 0},
-        }
-        
-        # Get demand boost from multi-source signals
-        demand_boost = 0
-        try:
-            if COLLECTORS_AVAILABLE:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                signals = loop.run_until_complete(collect_multi_source_stroller_signals())
-                loop.close()
-                demand_score = signals.get('demand_score', 0.5)
-                demand_boost = int(demand_score * 30)  # Up to 30 point boost based on demand
-                if signals.get('source_status', {}).get('jiji') == 'success':
-                    sources_collected.append("jiji")
-                if signals.get('source_status', {}).get('facebook') == 'success':
-                    sources_collected.append("facebook")
-        except Exception as e:
-            logger.warning("demand_signal_failed", error=str(e))
-        
-        for model, data in popular_models.items():
-            final_score = data["base_score"] + demand_boost
-            model_scores[model] = {
-                'score': final_score,
-                'count': 1  # Mark as inferred from demand signals
-            }
-        
-        sources_collected.append("demand_signals")
-
+    # No fallback list: a model ranking must come from observed mentions.
     if not model_scores:
         print("❌ No stroller models found in multi-source content.")
         print("📡 Collected from:", ", ".join(sources_collected) if sources_collected else "none")
