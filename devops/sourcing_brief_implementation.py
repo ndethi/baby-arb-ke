@@ -10,7 +10,12 @@ from typing import List, Dict, Any
 
 import structlog
 
+from baby_arb.demand.cache import split_live_products
+from baby_arb.pricing.fx import FXUnavailable, get_usdkes_rate
+
 logger = structlog.get_logger()
+
+MAX_FX_AGE_HOURS = 24
 
 
 async def generate_sourcing_brief(dry_run: bool = True) -> str:
@@ -62,7 +67,19 @@ async def generate_sourcing_brief(dry_run: bool = True) -> str:
     avoid_this_week = []
     human_review_needed = []
     
-    for product in demand_data.get('products', []):
+    products, no_live_data = split_live_products(demand_data.get('products', []))
+
+    # FX from the pricing engine's cache; never a hard-coded fallback rate
+    # A rate older than 24h is treated as unavailable (see pricing/fx.py).
+    try:
+        fx_rate, fx_age_hours = get_usdkes_rate()
+        if fx_age_hours > MAX_FX_AGE_HOURS:
+            raise FXUnavailable(f"cached rate is {float(fx_age_hours):.0f}h old")
+    except FXUnavailable as e:
+        fx_rate, fx_age_hours = None, None
+        logger.warning("FX unavailable; priced items go to human review", error=str(e))
+
+    for product in products:
         name = product.get('name', '')
         brand = product.get('brand', '')
         model = product.get('model', '')
@@ -84,14 +101,16 @@ async def generate_sourcing_brief(dry_run: bool = True) -> str:
             })
             continue
         
+        if fx_rate is None:
+            human_review_needed.append({
+                'product': name,
+                'reason': 'FX rate unavailable; cannot compute target landed cost',
+                'demand_score': demand_score,
+                'confidence': confidence
+            })
+            continue
+
         # Calculate target landed cost for 50% margin
-        # Get FX rate from demand scout data or use default
-        fx_rate_str = demand_data.get('fx_rate', '145.0')  # Would normally come from separate FX cache
-        try:
-            fx_rate = Decimal(str(fx_rate_str))
-        except:
-            fx_rate = Decimal('145.0')  # Fallback
-            
         target_ke_sale_price = Decimal(str(jiji_median_sold_kes))
         target_gross_margin = Decimal('0.50')  # 50% floor
         target_landed_cost_usd = (target_ke_sale_price / fx_rate) * (Decimal('1') - target_gross_margin)
@@ -189,15 +208,25 @@ PRIORITY ITEMS
         brief_content += "- No items to avoid this week based on demand signals\n\n"
 
     brief_content += "\nASSUMPTIONS\n\n"
+    if fx_rate is not None:
+        brief_content += f"- FX {fx_rate} KES/USD from the pricing FX cache, {float(fx_age_hours):.1f}h old\n"
+    else:
+        brief_content += "- FX rate UNKNOWN: no target landed costs computed\n"
     brief_content += """- Demand Scout signal scores accurately reflect Kenyan market interest
 - Observed Jiji median sale prices represent achievable resale prices
 - Facebook group engagement correlates with purchase intent
 - Instagram and TikTok mention volumes indicate trending awareness
-- Exchange rate remains stable at ~145 KES/USD for cost calculations
 - Shipping costs from US to Nairobi average $25-35 per item via consolidator
 - Products in 'like-new' or 'any-functional' condition are acceptable for resale
 - No active recalls affect the priority items (verified via compliance check)
 """
+
+    brief_content += "\nNO LIVE DATA\n\n"
+    if no_live_data:
+        for product_name, reason in no_live_data:
+            brief_content += f"- {product_name}: {reason}\n"
+    else:
+        brief_content += "- None\n"
 
     brief_content += "\nHUMAN REVIEW NEEDED\n\n"
     if human_review_needed:

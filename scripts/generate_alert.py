@@ -10,8 +10,13 @@ import urllib.parse
 from datetime import datetime, timedelta
 from pathlib import Path
 
-# Add the project root to sys.path to import config if needed
-sys.path.append(str(Path(__file__).parent.parent))
+# Make the baby_arb package importable when run as a plain script
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+
+from baby_arb.demand.cache import split_live_products
+from baby_arb.pricing.fx import FXUnavailable, get_usdkes_rate
+
+MAX_FX_AGE_HOURS = 24
 
 def load_target_categories():
     """Load target categories from config/target_categories.yaml or use defaults."""
@@ -49,14 +54,21 @@ def main():
         print(f"Error: Could not load demand scout file {demand_scout_path}: {e}", file=sys.stderr)
         sys.exit(1)
     
-    products = data.get("products", [])
-    generated_at = data.get("generated_at", datetime.now().isoformat())
-    
+    products, excluded = split_live_products(data.get("products", []))
+
     # Target categories
     target_categories = load_target_categories()
-    
-    # Fallback FX rate
-    FX_RATE = 145.5  # KES per USD
+
+    # FX from the pricing engine's cache; never a hard-coded rate
+    # A rate older than 24h is treated as unavailable (see pricing/fx.py).
+    try:
+        fx_rate, fx_age_hours = get_usdkes_rate()
+        if fx_age_hours > MAX_FX_AGE_HOURS:
+            raise FXUnavailable(f"cached rate is {float(fx_age_hours):.0f}h old")
+        fx_rate = float(fx_rate)
+    except FXUnavailable as e:
+        fx_rate, fx_age_hours = None, None
+        print(f"Warning: FX unavailable, target costs omitted: {e}", file=sys.stderr)
     
     # Prepare high-signal items
     high_signal_items = []
@@ -81,8 +93,11 @@ def main():
             
             # Compute target landed cost (USD) and target KE price (KES) for 50% gross margin
             # sale_price = cost * 1.5  => cost = sale_price / 1.5
+            if fx_rate is None:
+                # Cannot convert the KE price to a target USD cost: abstain
+                continue
             target_ke_price_kes = float(jiji_median_sold_kes)
-            target_landed_cost_usd = (target_ke_price_kes / 1.5) / FX_RATE
+            target_landed_cost_usd = (target_ke_price_kes / 1.5) / fx_rate
             
             # Compliance flags (simplified)
             compliance_flags = []
@@ -124,7 +139,7 @@ def main():
     for cat in target_categories:
         if cat not in represented_categories:
             # Provide a generic idea block
-            reason = "No recent listings in demand scout (score < 0.2)"
+            reason = "No live high-signal product in this category"
             ideas = []
             if "nursery" in cat:
                 ideas = [
@@ -187,6 +202,13 @@ def main():
     
     lines.append(f"🗓️ {date_str} Daily Baby‑Arb‑Ke Alert")
     lines.append("")
+    if excluded:
+        lines.append(f"⚪ {len(excluded)} products excluded: no live demand data")
+        lines.append("")
+    if fx_rate is None:
+        lines.append("⚪ FX rate UNKNOWN: target landed costs omitted")
+        lines.append("")
+
     # High Signal Purchases Available
     if high_signal_items:
         lines.append("🟢 HIGH SIGNAL PURCHASES AVAILABLE")
