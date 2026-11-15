@@ -58,3 +58,10 @@ def test_demand_score():
     )
     assert result.exit_code == 0
     assert "demand_score" in result.stdout
+
+
+def test_demand_check_reports_unknown_not_demo_values():
+    result = runner.invoke(app, ["demand", "check", "Baby Stroller"])
+    assert result.exit_code == 0
+    assert "UNKNOWN" in result.stdout
+    assert "demo" not in result.stdout.lower()

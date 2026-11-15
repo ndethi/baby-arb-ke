@@ -12,34 +12,15 @@ to work around Reddit access restrictions (May 2026) while still extracting
 actual product models (not just categories).
 """
 
-import json
 import re
 import csv
 import os
-import asyncio
 from datetime import datetime
 from urllib.parse import quote_plus
-from decimal import Decimal
 import subprocess
 import requests
 import sys
 import structlog
-
-# Add the src directory to the path for importing demand collectors
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src'))
-
-# Import demand collectors
-try:
-    from baby_arb.demand.collectors.base import BaseCollector
-    from baby_arb.demand.collectors.jiji import JijiCollector
-    from baby_arb.demand.collectors.facebook import FacebookCollector
-    from baby_arb.demand.collectors.instagram_public import InstagramPublicCollector
-    from baby_arb.demand.collectors.tiktok_public import TikTokPublicCollector
-    from baby_arb.demand.aggregator import compose_signal
-    from baby_arb.models.demand import DemandSignals
-    COLLECTORS_AVAILABLE = True
-except ImportError:
-    COLLECTORS_AVAILABLE = False
 
 logger = structlog.get_logger()
 
@@ -252,75 +233,6 @@ def fetch_instagram_content(hashtag, limit=10):
     
     return posts
 
-async def collect_multi_source_breast_pump_signals():
-    """
-    Collect breast pump demand signals from multiple public sources.
-    Returns aggregated demand signals.
-    """
-    if not COLLECTORS_AVAILABLE:
-        # Fallback: return basic signals when collectors aren't available
-        return {
-            "product": "breast pump",
-            "demand_score": 0.65,
-            "confidence": "MEDIUM",
-            "recommendation": "WATCH",
-            "source_status": {
-                "tiktok": "attempted",
-                "instagram": "attempted",
-                "forums": "attempted",
-                "reddit": "attempted"
-            }
-        }
-    
-    # Initialize collectors
-    collectors = {
-        "jiji": JijiCollector(),
-        "facebook": FacebookCollector(),
-        "instagram": InstagramPublicCollector(),
-        "tiktok": TikTokPublicCollector(),
-    }
-    
-    # Collect signals for breast pumps
-    product_name = "breast pump"
-    signals = DemandSignals()
-    source_status = {}
-    
-    # Run all collectors for breast pumps
-    for source_name, collector in collectors.items():
-        try:
-            collector_signals = await collector.collect(product_name)
-            # Merge signals (non-None values overwrite)
-            for field in collector_signals.__class__.model_fields:
-                if field not in ["entered_by", "entered_at"]:  # Skip metadata
-                    value = getattr(collector_signals, field)
-                    if value is not None:
-                        setattr(signals, field, value)
-            source_status[source_name] = "success"
-        except Exception as e:
-            logger.warning(f"Collector {source_name} failed for {product_name}", error=str(e))
-            source_status[source_name] = f"failed: {str(e)}"
-    
-    # Compose signal to get demand score
-    try:
-        product_signal = compose_signal(product_name, signals)
-        demand_score = float(product_signal.demand_score)
-        confidence = product_signal.confidence.value if hasattr(product_signal.confidence, 'value') else str(product_signal.confidence)
-        recommendation = product_signal.recommendation.value if hasattr(product_signal.recommendation, 'value') else str(product_signal.recommendation)
-    except Exception as e:
-        logger.error(f"Failed to compose signal for {product_name}", error=str(e))
-        demand_score = 0.65
-        confidence = "MEDIUM"
-        recommendation = "WATCH"
-    
-    return {
-        "product": product_name,
-        "demand_score": demand_score,
-        "confidence": confidence,
-        "recommendation": recommendation,
-        "source_status": source_status,
-        "signals": signals
-    }
-
 def main():
     print(f"🕒 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Multi-Source Breast Pump Scan")
 
@@ -434,49 +346,7 @@ def main():
     except Exception as e:
         logger.warning("reddit_rss_fallback_failed", error=str(e))
 
-    # If no specific models found, use demand signals to weight known popular models
-    if not model_scores:
-        print("⚠️  No specific models found in content. Using demand-weighted popular models...")
-        # Popular pump models with base popularity scores
-        popular_models = {
-            "Spectra S2": {"base_score": 85, "demand_boost": 0},
-            "Medela Pump In Style": {"base_score": 80, "demand_boost": 0},
-            "Willow 3.0": {"base_score": 75, "demand_boost": 0},
-            "Medela Freestyle": {"base_score": 70, "demand_boost": 0},
-            "Spectra S1": {"base_score": 68, "demand_boost": 0},
-            "Elvie Double": {"base_score": 65, "demand_boost": 0},
-            "Willow Go": {"base_score": 62, "demand_boost": 0},
-            "Lansinoh SignaturePro": {"base_score": 55, "demand_boost": 0},
-            "Medela Swing Maxi": {"base_score": 50, "demand_boost": 0},
-            "Ameda Platinum": {"base_score": 45, "demand_boost": 0},
-        }
-        
-        # Get demand boost from multi-source signals
-        demand_boost = 0
-        try:
-            if COLLECTORS_AVAILABLE:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                signals = loop.run_until_complete(collect_multi_source_breast_pump_signals())
-                loop.close()
-                demand_score = signals.get('demand_score', 0.5)
-                demand_boost = int(demand_score * 30)  # Up to 30 point boost based on demand
-                if signals.get('source_status', {}).get('jiji') == 'success':
-                    sources_collected.append("jiji")
-                if signals.get('source_status', {}).get('facebook') == 'success':
-                    sources_collected.append("facebook")
-        except Exception as e:
-            logger.warning("demand_signal_failed", error=str(e))
-        
-        for model, data in popular_models.items():
-            final_score = data["base_score"] + demand_boost
-            model_scores[model] = {
-                'score': final_score,
-                'count': 1  # Mark as inferred from demand signals
-            }
-        
-        sources_collected.append("demand_signals")
-
+    # No fallback list: a model ranking must come from observed mentions.
     if not model_scores:
         print("❌ No pump models found in multi-source content.")
         print("📡 Collected from:", ", ".join(sources_collected) if sources_collected else "none")

@@ -11,6 +11,10 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from urllib.parse import quote_plus
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+
+from baby_arb.demand.cache import split_live_products
+
 def load_demand_scout():
     """Load the latest demand scout JSON."""
     script_dir = Path(__file__).resolve().parent.parent  # skill dir
@@ -50,13 +54,17 @@ def load_target_categories():
     return default
 
 def get_category_score(products, category):
-    """Find the highest demand score for a given category in products list."""
-    best_score = 0.0
-    best_confidence = ""
+    """Find the highest live demand score for a category.
+
+    Returns (None, "UNKNOWN") when no live product covers the category, so a
+    missing signal is never reported as a score of 0.
+    """
+    best_score = None
+    best_confidence = "UNKNOWN"
     for p in products:
         if p.get("category", "").lower() == category.lower():
-            score = p.get("demand_score", 0.0)
-            if score > best_score:
+            score = p["demand_score"]
+            if best_score is None or score > best_score:
                 best_score = score
                 best_confidence = p.get("confidence", "")
     return best_score, best_confidence
@@ -80,8 +88,10 @@ def generate_ideas_for_category(category, score, confidence):
     # Normalize category for matching
     cat_lower = category.lower()
     # Status line
-    if score < 0.2:
-        status = f"No recent listings in demand scout (score < 0.2)"
+    if score is None:
+        status = "UNKNOWN – no live demand data for this category"
+    elif score < 0.2:
+        status = "No recent listings in demand scout (score < 0.2)"
     elif score < 0.4:
         status = f"Low signal – score {score:.2f} ({confidence})"
     else:
@@ -190,7 +200,10 @@ def generate_ideas_for_category(category, score, confidence):
 def main():
     data = load_demand_scout()
     target_cats = load_target_categories()
-    products = data.get("products", [])
+    products, excluded = split_live_products(data.get("products", []))
+    if excluded:
+        print(f"Excluded {len(excluded)} cached products without live data "
+              f"(e.g. {excluded[0][0]}: {excluded[0][1]})", file=sys.stderr)
     generated_at = data.get("generated_at", "")
     # Determine week range (Monday to Sunday) based on generated_at or today
     try:
@@ -210,8 +223,8 @@ def main():
     any_low = False
     for cat in target_cats:
         score, confidence = get_category_score(products, cat)
-        # Consider low signal if score < 0.4 or category not found (score 0.0)
-        if score < 0.4:
+        # Low signal: no live score for the category, or score < 0.4
+        if score is None or score < 0.4:
             any_low = True
             lines.append("")
             lines.append(f"• {cat.title()}")

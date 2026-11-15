@@ -28,11 +28,18 @@ class TestComposeSignal:
         assert result.recommendation is not None
         assert "PURSUE" in result.recommendation
 
-    def test_no_signals_low_confidence(self):
+    def test_no_signals_abstains_as_unknown(self):
         signals = DemandSignals()
         result = compose_signal("Unknown product", signals)
-        assert result.confidence == "LOW"
+        assert result.confidence == "UNKNOWN"
+        assert result.recommendation is not None
+        assert result.recommendation.startswith("UNKNOWN")
         assert len(result.missing_data) >= 5
+
+    def test_single_signal_low_confidence(self):
+        signals = DemandSignals(fb_group_intent_score=Decimal("0.5"))
+        result = compose_signal("Thin product", signals)
+        assert result.confidence == "LOW"
 
     def test_supply_tightness_high_score(self):
         # 2 active, 20 sold → very tight

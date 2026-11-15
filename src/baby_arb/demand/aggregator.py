@@ -22,7 +22,8 @@ def compose_signal(
     """Compute composite demand score from raw signals.
 
     Each signal is normalised to a 0-1 sub-score, then weighted.
-    Missing signals are tracked for confidence assessment.
+    Missing signals are tracked for confidence assessment. With no signal
+    at all, confidence and recommendation are UNKNOWN (abstain).
 
     Args:
         name: Display name of the product.
@@ -91,17 +92,28 @@ def compose_signal(
     else:
         missing.append("tiktok_kenyan_mentions")
 
+    if not sub_scores:
+        # Nothing observed: abstain instead of reporting a score of 0.
+        return ProductSignal(
+            name=name,
+            brand=brand,
+            model=model,
+            category=category,
+            signals=signals,
+            missing_data=missing,
+            demand_score=Decimal("0"),
+            confidence="UNKNOWN",
+            recommendation="UNKNOWN — no live demand data",
+        )
+
     # Weighted sum, with weights normalised to sum of present sub-scores.
     total_weight = sum(
         (DEFAULT_WEIGHTS[k] for k in sub_scores), start=Decimal("0")
     )
-    if total_weight > 0:
-        score = sum(
-            (sub_scores[k] * DEFAULT_WEIGHTS[k] for k in sub_scores),
-            start=Decimal("0"),
-        ) / total_weight
-    else:
-        score = Decimal("0")
+    score = sum(
+        (sub_scores[k] * DEFAULT_WEIGHTS[k] for k in sub_scores),
+        start=Decimal("0"),
+    ) / total_weight
 
     confidence = _confidence_for_missing(missing)
     recommendation = _recommendation(score, confidence)

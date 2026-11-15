@@ -35,6 +35,9 @@ class DemandSignals(BaseModel):
 
     # Provenance
     entered_by: str = "manual"  # manual | scraper | api
+    # Sources that produced no value, with the reason (source -> reason).
+    # A missing value stays None; the reason says why it is UNKNOWN.
+    unknown_reasons: dict[str, str] = Field(default_factory=dict)
     entered_at: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -50,8 +53,8 @@ class ProductSignal(BaseModel):
     missing_data: list[str] = Field(default_factory=list)
 
     demand_score: Decimal  # 0.0 - 1.0
-    confidence: str  # HIGH | MEDIUM | LOW
-    recommendation: str | None = None  # PURSUE | WATCH | SKIP
+    confidence: str  # HIGH | MEDIUM | LOW | UNKNOWN (no signal at all)
+    recommendation: str | None = None  # PURSUE | WATCH | SKIP | UNKNOWN
 
 
 class DemandReport(BaseModel):

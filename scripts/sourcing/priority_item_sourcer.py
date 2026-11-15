@@ -24,56 +24,20 @@ def calculate_shipping_cost_estimate(weight_lbs=5):
     per_lb_rate = 2.0  # Estimated
     return base_rate + (weight_lbs * per_lb_rate)
 
+EBAY_UNAVAILABLE_REASON = (
+    "eBay search UNKNOWN: Browse API client lives on task/ebay-browse-client "
+    "and needs eBay developer keys"
+)
+
+
 def search_ebay_for_item(query, max_results=10):
+    """Search eBay for an item.
+
+    Returns no listings until the eBay Browse API client is wired in; it
+    never returns made-up listings or item URLs.
     """
-    Simulate searching eBay for an item.
-    In a real implementation, this would use:
-    - browser_navigate to eBay.com
-    - browser_type to enter query in search box
-    - browser_press Enter
-    - browser_snapshot to get results
-    - Extract listings with browser_vision or parsing
-    
-    For now, we'll return mock data to demonstrate the flow.
-    """
-    print(f"[SEARCH] Would search eBay for: '{query}'")
-    print(f"[SEARCH] Would navigate to eBay.com, enter query, and extract results")
-    
-    # Mock results - in reality these would come from actual scraping
-    mock_results = [
-        {
-            "title": f"{query} - Like New",
-            "price": 80.00,
-            "shipping": 15.00,
-            "condition": "Like New",
-            "location": "US",
-            "url": f"https://ebay.com/itm/{hash(query) % 1000000}",
-            "seller_rating": 4.8,
-            "reviews": 1242
-        },
-        {
-            "title": f"{query} - Excellent Condition",
-            "price": 95.00,
-            "shipping": 0.00,  # Free shipping
-            "condition": "Excellent",
-            "location": "US",
-            "url": f"https://ebay.com/itm/{hash(query) % 1000000 + 1}",
-            "seller_rating": 4.9,
-            "reviews": 856
-        },
-        {
-            "title": f"{query} - Used - Good",
-            "price": 65.00,
-            "shipping": 12.00,
-            "condition": "Good",
-            "location": "US",
-            "url": f"https://ebay.com/itm/{hash(query) % 1000000 + 2}",
-            "seller_rating": 4.6,
-            "reviews": 2109
-        }
-    ]
-    
-    return mock_results[:max_results]
+    print(f"[SEARCH] {EBAY_UNAVAILABLE_REASON} (query: '{query}')")
+    return []
 
 def filter_and_rank_results(results, max_price_usd, min_condition="Like New"):
     """
@@ -140,9 +104,8 @@ def format_currency_usd(amount):
     """Format amount as USD currency."""
     return f"${amount:.2f}"
 
-def format_currency_kes(amount):
-    """Format amount as KES currency using ~145 exchange rate."""
-    kes_amount = amount * 145
+def format_currency_kes(kes_amount):
+    """Format an amount that is already in KES (every caller passes KES)."""
     return f"KES {kes_amount:,.0f}"
 
 def source_priority_items(brief_data, warehouse_address):
