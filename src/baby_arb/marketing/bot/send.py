@@ -1,0 +1,52 @@
+"""The only path for messages the engine starts (reminders, digests).
+
+Destinations are checked against the admin/ops allow-list before any network
+call, so no code path can message a buyer by mistake. Replies inside the bot
+process go back to the chat the admin wrote from, which the handlers have
+already checked.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import httpx
+
+from baby_arb.marketing.bot.auth import Access
+
+API_BASE = "https://api.telegram.org"
+
+
+class DestinationNotAllowedError(RuntimeError):
+    """Raised when a send targets a chat outside the allow-list."""
+
+
+class OpsSender:
+    """Send Telegram messages to admins and the ops group only."""
+
+    def __init__(self, token: str, access: Access, client: httpx.Client | None = None) -> None:
+        self._token = token
+        self._access = access
+        self._client = client or httpx.Client(timeout=30.0)
+
+    def _check(self, chat_id: int) -> None:
+        if chat_id not in self._access.chat_ids:
+            raise DestinationNotAllowedError(f"chat {chat_id} is not an admin or ops chat")
+
+    def send_message(
+        self, chat_id: int, text: str, reply_markup: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Send a text message; returns Telegram's `result` object.
+
+        Raises:
+            DestinationNotAllowedError: chat_id is not allow-listed.
+            httpx.HTTPStatusError: Telegram rejected the call.
+        """
+        self._check(chat_id)
+        payload: dict[str, Any] = {"chat_id": chat_id, "text": text}
+        if reply_markup is not None:
+            payload["reply_markup"] = reply_markup
+        resp = self._client.post(f"{API_BASE}/bot{self._token}/sendMessage", json=payload)
+        resp.raise_for_status()
+        result: dict[str, Any] = resp.json()["result"]
+        return result

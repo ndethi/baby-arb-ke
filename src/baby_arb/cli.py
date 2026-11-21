@@ -20,6 +20,7 @@ from baby_arb import __version__
 from baby_arb.compliance.cpsc import write_cache_for_test
 from baby_arb.compliance.gate import gate as compliance_gate
 from baby_arb.demand.aggregator import compose_signal
+from baby_arb.marketing.cli import bot_app, db_upgrade, mkt_app
 from baby_arb.models.candidate import BuyCandidate, ItemCategory, ItemCondition
 from baby_arb.models.compliance import ComplianceVerdict
 from baby_arb.models.demand import DemandSignals
@@ -45,6 +46,8 @@ app.add_typer(compliance_app, name="compliance")
 app.add_typer(demand_app, name="demand")
 app.add_typer(brief_app, name="brief")
 app.add_typer(db_app, name="db")
+app.add_typer(mkt_app, name="mkt")
+app.add_typer(bot_app, name="bot")
 
 
 # ── Top-level commands ───────────────────────────────────────────────
@@ -362,16 +365,8 @@ def brief_weekly(
         console.print("  2. Create git branch: task/weekly-brief-YYYY-MM-DD") 
         console.print("  3. Commit with: docs(brief): weekly sourcing brief YYYY-MM-DD")
         console.print("  4. Open PR for review")
-@db_app.command("init")
-def db_init() -> None:
-    """Initialise the SQLite database. (Stub — Hermes handoff.)"""
-    console.print(
-        Panel(
-            "[yellow]Storage layer is a Hermes handoff item.[/yellow] "
-            "See src/baby_arb/storage/__init__.py for the build plan.",
-            title="db init",
-        )
-    )
+db_app.command("upgrade")(db_upgrade)
+db_app.command("init", help="Alias of `db upgrade`.")(db_upgrade)
 
 
 # ── helpers ─────────────────────────────────────────────────────────
