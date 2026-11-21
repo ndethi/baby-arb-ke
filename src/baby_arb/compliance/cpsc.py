@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from baby_arb.config import get_settings
 from baby_arb.models.candidate import BuyCandidate
@@ -84,7 +84,7 @@ def check_cpsc_recall(
     return CPSCResult(kind="clear", detail="no matching recall", cache_age_hours=cache_age)
 
 
-def _load_cache(now: datetime) -> tuple[dict | None, Decimal]:
+def _load_cache(now: datetime) -> tuple[dict[str, Any] | None, Decimal]:
     """Load the CPSC recall cache. Returns (data, age_hours)."""
     if not CACHE_PATH.exists():
         return None, Decimal("0")
@@ -100,7 +100,7 @@ def _load_cache(now: datetime) -> tuple[dict | None, Decimal]:
         return None, Decimal("0")
 
 
-def write_cache_for_test(recalls: list[dict], now: datetime | None = None) -> None:
+def write_cache_for_test(recalls: list[dict[str, Any]], now: datetime | None = None) -> None:
     """Test helper. Inject a known recalls list into the cache."""
     now = now or datetime.now(UTC)
     CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)

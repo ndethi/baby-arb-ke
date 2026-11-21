@@ -19,6 +19,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MAX_HEADER = 100
+MAX_BODY_LINE = 100  # commitlint body-max-line-length / footer-max-line-length
 # Commits produced by tooling rather than by hand.
 TOOL_HEADERS = re.compile(r"^(Merge |Revert \"|bump: version )")
 
@@ -38,20 +39,38 @@ def check_header(header: str, pattern: re.Pattern[str]) -> str | None:
         return f"header longer than {MAX_HEADER} chars"
     if not pattern.fullmatch(header):
         return "does not match <type>(<scope>): <description> (types in .cz.toml)"
+    subject = header.split(": ", 1)[1] if ": " in header else header
+    if subject != subject.lower():
+        return "subject must be lower-case (commitlint subject-case)"
     return None
 
 
-def headers_in_range(rev_range: str) -> list[tuple[str, str]]:
-    """Return (short sha, header) for every non-merge commit in a range."""
+def check_message(message: str, pattern: re.Pattern[str]) -> str | None:
+    """Check the header plus body/footer line lengths, as commitlint does in CI."""
+    lines = [line for line in message.splitlines() if not line.startswith("#")]
+    header = lines[0].strip() if lines else ""
+    err = check_header(header, pattern)
+    if err or TOOL_HEADERS.match(header):
+        return err
+    if len(lines) > 1 and lines[1].strip():
+        return "body must start after a blank line"
+    long = [n for n, line in enumerate(lines[1:], start=2) if len(line) > MAX_BODY_LINE]
+    if long:
+        return f"body line {long[0]} longer than {MAX_BODY_LINE} chars"
+    return None
+
+
+def messages_in_range(rev_range: str) -> list[tuple[str, str]]:
+    """Return (short sha, full message) for every non-merge commit in a range."""
     out = subprocess.run(
-        ["git", "log", "--no-merges", "--format=%h%x09%s", rev_range],
+        ["git", "log", "--no-merges", "--format=%h%x00%B%x1e", rev_range],
         check=True,
         capture_output=True,
         text=True,
         cwd=REPO_ROOT,
     ).stdout
-    pairs = (line.split("\t", 1) for line in out.splitlines() if line)
-    return [(sha, header) for sha, header in pairs]
+    records = (rec.strip("\n").split("\x00", 1) for rec in out.split("\x1e") if rec.strip())
+    return [(sha, msg.strip("\n")) for sha, msg in records]
 
 
 def main(argv: list[str]) -> int:
@@ -59,18 +78,18 @@ def main(argv: list[str]) -> int:
     pattern = load_pattern()
     if len(argv) == 2 and argv[0] == "--range":
         bad = [
-            (sha, header, err)
-            for sha, header in headers_in_range(argv[1])
-            if (err := check_header(header, pattern))
+            (sha, msg.splitlines()[0] if msg else "", err)
+            for sha, msg in messages_in_range(argv[1])
+            if (err := check_message(msg, pattern))
         ]
         for sha, header, err in bad:
             print(f"[ERROR] {sha} {header!r}: {err}")
         return 1 if bad else 0
     if len(argv) == 1:
-        lines = Path(argv[0]).read_text().splitlines()
-        header = lines[0].strip() if lines else ""
-        err = check_header(header, pattern)
+        message = Path(argv[0]).read_text()
+        err = check_message(message, pattern)
         if err:
+            header = message.splitlines()[0] if message else ""
             print(f"[ERROR] commit message {header!r}: {err}")
             return 1
         return 0

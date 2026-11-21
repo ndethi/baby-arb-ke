@@ -93,3 +93,23 @@ def standard_carseat_candidate():
         reference_source="jiji_median_sold",
         reference_n=5,
     )
+
+
+@pytest.fixture
+def db_url(tmp_path):
+    """A SQLite URL migrated to head with Alembic (the real migration path)."""
+    from baby_arb.storage.migrate import run_migrations
+
+    url = f"sqlite:///{tmp_path / 'test.db'}"
+    run_migrations(url)
+    return url
+
+
+@pytest.fixture
+def db_engine(db_url):
+    """Engine for the migrated test database."""
+    from baby_arb.storage.db import make_engine
+
+    engine = make_engine(db_url)
+    yield engine
+    engine.dispose()

@@ -10,6 +10,7 @@ import json
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 from baby_arb.config import get_settings
 
@@ -52,7 +53,7 @@ def get_usdkes_rate(now: datetime | None = None) -> tuple[Decimal, Decimal]:
     return fresh, Decimal("0")
 
 
-def _load_cache() -> dict | None:
+def _load_cache() -> dict[str, Any] | None:
     if not CACHE_PATH.exists():
         return None
     try:

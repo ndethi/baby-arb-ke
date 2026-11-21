@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 import structlog
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -11,6 +13,8 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from baby_arb.models.demand import DemandSignals
 
 logger = structlog.get_logger()
+
+T = TypeVar("T")
 
 
 class BaseCollector(ABC):
@@ -31,7 +35,7 @@ class BaseCollector(ABC):
         self.last_call_time = time.time()
 
     @abstractmethod
-    async def collect(self, product_name: str, **kwargs) -> DemandSignals:
+    async def collect(self, product_name: str, **kwargs: Any) -> DemandSignals:
         """Collect demand signals for a product.
 
         Args:
@@ -48,7 +52,7 @@ class BaseCollector(ABC):
         wait=wait_exponential(multiplier=1, min=2, max=10),
         reraise=True,
     )
-    def _safe_api_call(self, func, *args, **kwargs):
+    def _safe_api_call(self, func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
         """Wrap API calls with retry logic and rate limiting."""
         self._rate_limit()
         try:
