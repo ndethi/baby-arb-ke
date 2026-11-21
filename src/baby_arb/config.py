@@ -45,6 +45,31 @@ class Settings(BaseSettings):
     facebook_app_secret: str | None = None
     facebook_access_token: str | None = None
 
+    # Marketing engine (docs/marketing/ENGINE_SPEC.md)
+    # TELEGRAM_BOT_TOKEN above is the shop bot's token.
+    telegram_admin_ids: str = ""  # comma-separated Telegram user IDs
+    telegram_ops_chat_id: int | None = None  # the "babyReShop Ops" group
+
+    meta_app_id: str | None = None
+    meta_app_secret: str | None = None
+    meta_page_id: str | None = None
+    meta_ig_user_id: str | None = None
+    meta_system_user_token: str | None = None
+    meta_ad_account_id: str | None = None
+
+    llm_provider: str = "nvidia"  # nvidia | openrouter
+    llm_model: str = "nvidia/nemotron-3-super-120b-a12b"
+    llm_fallback_provider: str | None = "openrouter"
+    llm_fallback_model: str | None = "nvidia/nemotron-3.5-super-vl:free"
+    llm_daily_cap_usd: Decimal = Field(default=Decimal("1"))
+    # Free-tier models cost $0, so a call-count cap also protects rate limits.
+    llm_daily_call_cap: int = 200
+    # USD per million tokens for the configured models (0 for free tiers).
+    llm_price_in_per_mtok: Decimal = Field(default=Decimal("0"))
+    llm_price_out_per_mtok: Decimal = Field(default=Decimal("0"))
+    nvidia_api_key: str | None = None
+    openrouter_api_key: str | None = None
+
     # Storage
     database_url: str = "sqlite:///./data/baby_arb.db"
 
@@ -68,6 +93,13 @@ class Settings(BaseSettings):
 
     # Logging
     log_level: str = "INFO"
+
+    @property
+    def admin_ids(self) -> frozenset[int]:
+        """Telegram user IDs allowed to command the shop bot."""
+        return frozenset(
+            int(part) for part in self.telegram_admin_ids.replace(" ", "").split(",") if part
+        )
 
 
 @lru_cache
