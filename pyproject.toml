@@ -21,6 +21,8 @@ fastapi = {version = "^0.115", optional = true}
 uvicorn = {version = "^0.30", optional = true}
 beautifulsoup4 = "^4.14.3"
 requests = "^2.34.2"
+python-telegram-bot = "^22.0"
+alembic = "^1.13"
 
 [tool.poetry.extras]
 api = ["fastapi", "uvicorn"]
@@ -36,6 +38,7 @@ ruff = "^0.5"
 mypy = "^1.10"
 bandit = "^1.9.4"
 pip-audit = "^2.10.1"
+types-python-dateutil = "^2.9"
 
 [tool.poetry.scripts]
 baby-arb = "baby_arb.cli:app"
