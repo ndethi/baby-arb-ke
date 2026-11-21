@@ -14,6 +14,16 @@ consolidator, and resell at margins that net 30%+ after all costs.
 
 ---
 
+## Current direction (Nov 2026)
+
+The babyReShop KE marketing engine is the active build:
+`docs/marketing/ENGINE_SPEC.md` (wins where it disagrees with older docs)
+and `src/baby_arb/marketing/` + `src/baby_arb/posting/`. Its rules: the
+admin's price is never changed, BLOCK is never approvable, nothing is
+published and no buyer is messaged without an admin action, and every model
+call goes through `marketing/llm.py` under the daily cap. The arbitrage
+pipeline below is paused (cron jobs off since 2026-09-27).
+
 ## Read first
 
 Before doing any work:
