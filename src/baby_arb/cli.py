@@ -21,7 +21,9 @@ from baby_arb.compliance.cpsc import write_cache_for_test
 from baby_arb.compliance.gate import gate as compliance_gate
 from baby_arb.demand.aggregator import compose_signal
 from baby_arb.models.candidate import BuyCandidate, ItemCategory, ItemCondition
+from baby_arb.models.compliance import ComplianceVerdict
 from baby_arb.models.demand import DemandSignals
+from baby_arb.models.pricing import LandedCost, PricingVerdict
 from baby_arb.pricing import calculate_landed_cost
 from baby_arb.pricing.fx import set_cache_for_test
 from baby_arb.pricing.intl_shipping import Carrier
@@ -385,7 +387,7 @@ def _mask(v: str | None) -> str:
     return f"{v[:4]}…{v[-3:]}"
 
 
-def _render_pricing(candidate, landed, verdict) -> None:
+def _render_pricing(candidate: BuyCandidate, landed: LandedCost, verdict: PricingVerdict) -> None:
     """Pretty-print a pricing verdict."""
     color = {
         "BUY": "green",
@@ -431,7 +433,7 @@ def _render_pricing(candidate, landed, verdict) -> None:
     console.print(table)
 
 
-def _render_compliance(verdict) -> None:
+def _render_compliance(verdict: ComplianceVerdict) -> None:
     color = {
         "PASS": "green",
         "BLOCK": "red",

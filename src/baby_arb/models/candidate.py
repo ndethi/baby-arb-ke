@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
+from typing import Any
 
 from pydantic import BaseModel, Field, HttpUrl
 
@@ -76,7 +77,7 @@ class BuyCandidate(BaseModel):
     # Listing metadata
     listing_ends_at: datetime | None = None
     photos: list[HttpUrl] = Field(default_factory=list)
-    raw_listing_data: dict = Field(default_factory=dict)
+    raw_listing_data: dict[str, Any] = Field(default_factory=dict)
 
     # Car seat extra
     dom_extracted: datetime | None = None

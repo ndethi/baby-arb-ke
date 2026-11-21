@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import structlog
 
 from baby_arb.demand.collectors.base import BaseCollector
@@ -34,7 +36,7 @@ class InstagramPublicCollector(BaseCollector):
             "#babyfashionke",
         ]
 
-    async def collect(self, product_name: str, **kwargs) -> DemandSignals:
+    async def collect(self, product_name: str, **kwargs: Any) -> DemandSignals:
         """Collect demand signals from Instagram public search.
 
         Returns UNKNOWN until a provider (Apify/Phyllo) is wired in Phase 4.
