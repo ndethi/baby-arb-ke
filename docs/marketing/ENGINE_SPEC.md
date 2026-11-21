@@ -1,6 +1,6 @@
 # babyReShop KE Marketing Engine: spec
 
-Version 1.0, 20 Nov 2026. Lives in the repo as `docs/marketing/ENGINE_SPEC.md`.
+Version 1.1, 21 Nov 2026 (1.1 adds the content calendar, section 4). Lives in the repo as `docs/marketing/ENGINE_SPEC.md`.
 Owner: Ndethi. Builder: Claude Code. Runtime: Hermes plus a local bot process.
 
 The operator's flow in section 1 is the product. Everything else in this spec serves it.
@@ -16,21 +16,21 @@ and the posting scaffold's auto-pricing), this spec wins.
 3. **Identify.** The bot identifies brand and model from the photos and asks if unsure.
 4. **Price.** The admin's price is used. The bot only warns (for example, below 3x the buy price).
 5. **Render.** The bot builds a feed graphic (4:5), a story graphic (9:16), a short vertical video for TikTok and Reels, and captions per platform. All are built around the real photos.
-6. **Preview.** The bot sends the bundle back to Telegram with three buttons: ✅ Approve, ✏️ Edit, ❌ Reject.
+6. **Preview.** The bot sends the bundle back to Telegram with a proposed calendar slot and the buttons ✅ Approve, ✏️ Edit, ❌ Reject, ⏩ Now, 🕒 Move, ⏭ Skip.
 7. **Edit loop.** On ✏️ the admin describes changes in plain words. The bot applies them, re-renders and sends the bundle again. Every change is logged as drift.
-8. **Publish.** On ✅ the bot publishes to Instagram and the Facebook Page and sends the TikTok video to the admin's phone. Publishing goes through Meta's API, with no browser automation.
+8. **Schedule and publish.** On ✅ the post is queued in its calendar slot (section 4). At slot time the bot publishes to Instagram and the Facebook Page and sends the TikTok post to the admin's phone. Publishing goes through Meta's API, with no browser automation. Until Phase 3 the bot sends a reminder with the files instead, and the admin posts by hand.
 9. **Boost.** The admin boosts by hand. The bot never touches spend.
 10. **Watch.** An ad watcher reads results daily, alerts when a stop rule trips and recommends what to change at the end of a run.
 11. **Sell.** The admin types `sold P-0007` (or taps SOLD). Inventory updates, a SOLD graphic is made and posts are updated.
 12. **Talk.** DMs arrive in Telegram. Safe questions are answered automatically. Everything else gets a suggested reply that the admin sends with one tap, or the admin answers in the Instagram app.
-13. **Learn.** A weekly report turns drift, ad results and sales into proposed changes to defaults, which the admin approves.
+13. **Learn.** A weekly report turns drift, ad results, sales and best posting times into proposed changes to defaults and to the calendar, which the admin approves.
 
 ## 2. Principles and hard rules
 
 - **Humans decide.** Nothing is published, nothing is sent to a buyer (beyond the safe automatic tier), and no spend changes without an admin action in Telegram.
 - **Real photos only.** No AI-generated product images or video. Graphics frame the real photos and never alter the item.
 - **Safety first.** BLOCK items can never be approved. REVIEW items and unknown recall status need an explicit admin "yes, override".
-- **Deterministic by default.** Rendering, database work, publishing, scheduling and reports are plain Python with no model calls. A model is used only where judgement is needed (section 9).
+- **Deterministic by default.** Rendering, database work, publishing, scheduling and reports are plain Python with no model calls. A model is used only where judgement is needed (section 10).
 - **Meta account safety.** Use official APIs only, read data no more often than needed (ads once a day), no scraping, no bulk messaging.
 - **No new subscriptions.** Use free tiers and local tools: Telegram bot API, Meta developer app, Playwright, FFmpeg, SQLite, Cloudflare Tunnel (free). The only running cost is model calls, which have a daily cap.
 - **Data protection (Kenya DPA 2019).** Keep minimal buyer and seller data. Delete seller details 30 days after SOLD. Send marketing messages only to people who opted in.
@@ -45,12 +45,12 @@ earlier ones.
 | Phase | Name | What the admin gets | Depends on |
 |---|---|---|---|
 | 0 | Foundations | Bot answers `/ping`. Database migrated. Meta app created. | none |
-| 1 | Drop, preview, approve | Photos in, approved feed and story PNGs out, edits logged as drift. Posts by hand from the PNGs. | 0 |
+| 1 | Drop, preview, approve, calendar | Photos in, approved feed and story PNGs out, edits logged as drift. Every approved post gets a calendar slot; the bot reminds at slot time with the files and the admin posts by hand. | 0 |
 | 2 | Identify and video | Model ID, recall check, TikTok/Reels MP4 in the preview bundle. | 1 |
-| 3 | Publish and sell | ✅ publishes to IG and FB. `sold` updates inventory and posts. Seller (declutter) listings path. | 1 (2 optional) |
+| 3 | Publish and sell | Posts publish to IG and FB at their slot. `sold` updates inventory and posts. Seller (declutter) listings path. | 1 (2 optional) |
 | 4 | Ad watcher | Daily ad readout, stop-rule alerts, end-of-run recommendation. | 3 |
 | 5 | Inbox bridge | DMs in Telegram, safe auto-answers, one-tap suggested replies, funnel counts. | 3 |
-| 6 | Learning loop | Weekly drift and performance report, default changes, price-drop nudges, opt-in drop list, swipe file. | 1, 4, 5 |
+| 6 | Learning loop | Weekly drift and performance report, default and best-time changes, price-drop nudges, opt-in drop list, swipe file. | 1, 4, 5 |
 
 Target pace is one phase per week. Phases 4 and 5 can be built in parallel.
 
@@ -60,11 +60,11 @@ Target pace is one phase per week. Phases 4 and 5 can be built in parallel.
 
 **Build**
 - Install the posting scaffold (`src/baby_arb/posting/`) into the repo if it isn't there yet, and keep its 34 tests green.
-- Create `src/baby_arb/marketing/` (layout in section 7).
-- Migrate the database to the schema in section 6. Use Alembic or the existing SQLModel pattern, whichever the repo already uses.
+- Create `src/baby_arb/marketing/` (layout in section 8).
+- Migrate the database to the schema in section 7. Use Alembic or the existing SQLModel pattern, whichever the repo already uses.
 - Telegram bot process (`baby-arb bot run`) with `/ping`, `/help` and an allow-list of admin Telegram user IDs. Messages from anyone else are ignored.
 - `.env` keys: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ADMIN_IDS`, `META_APP_ID`, `META_APP_SECRET`, `META_PAGE_ID`, `META_IG_USER_ID`, `META_SYSTEM_USER_TOKEN`, `META_AD_ACCOUNT_ID`, `LLM_PROVIDER`, `LLM_DAILY_CAP_USD`.
-- Meta developer app inside business portfolio "babyReShop KE" (business_id 1173124822322578), with a system user token. The operator does this step by hand (checklist in section 11).
+- Meta developer app inside business portfolio "babyReShop KE" (business_id 1173124822322578), with a system user token. The operator does this step by hand (checklist in section 12).
 
 **Decision Claude Code must settle first:** can the Hermes Telegram gateway send media albums and inline buttons, and receive button presses? If yes, the bot runs as a Hermes skill. If not (recommended default), a thin `python-telegram-bot` process owns the Telegram UI and calls the `baby-arb` CLI. Hermes then handles the model calls and the scheduled jobs.
 
@@ -92,9 +92,11 @@ If the price is missing, the bot asks for it. The bot never guesses a price.
 5. Render (Playwright, HTML/CSS templates in `assets/templates/`):
    - `feed_4x5.png` 1080x1350: hero photo, price badge, code, condition badge, CTA strip, "Seller listing" tag on L-codes.
    - `story_9x16.png` 1080x1920: same elements, story-safe margins.
+   - `tiktok/` 1080x1920 photo-post set: one 9:16 frame per photo, price and code on the first frame.
    - For own stock, a "new in Nairobi from KES X" anchor appears only when the admin gave a reference price. No invented anchors.
 6. Creative checks as code (`baby-creative-eval`): minimum text size at phone scale, exactly one CTA, price visible, code visible, seller tag present on L-codes, no text over the item's flaw areas when flagged. Failures are fixed by the renderer or shown on the preview.
-7. Preview: Telegram album (feed, story, later the video) plus the captions, with buttons ✅ Approve / ✏️ Edit / ❌ Reject. Status changes to `PREVIEW`.
+7. Slot: the calendar proposes the next free slot for the post's kind (section 4) and writes a `schedule` row with status `PROPOSED`.
+8. Preview: Telegram album (feed, story, TikTok set, later the video) plus the captions and a slot line such as `Slot: Fri 27 Nov, 12:30 (listing 2/4)`, with buttons ✅ Approve (takes the proposed slot) / ✏️ Edit / ❌ Reject / ⏩ Now / 🕒 Move / ⏭ Skip. Status changes to `PREVIEW`.
 
 **Edit loop**
 - ✏️ asks "What should change?". The admin replies in plain words, for example "price bigger, drop 'washed', use photo 3 as main".
@@ -102,13 +104,14 @@ If the price is missing, the bot asks for it. The bot never guesses a price.
   `set_field(field, value)`, `swap_photo(slot, photo_n)`, `reorder_photos([...])`, `resize(element, up|down)`, `move(element, position)`, `toggle(element, on|off)`, `set_template(name)`, `rewrite_caption(platform, instruction)`, `crop(photo_n, focus)`.
 - The bot echoes the parsed operations ("I'll: make price badge larger, remove 'washed' from caption, set photo 3 as hero") and applies them, re-renders and sends a new preview (round N+1).
 - If the text can't be mapped to the list, the bot asks a short clarifying question. It does not guess.
-- Every operation is written to `edit_events` (section 6), with the raw text, round number and before and after values. This is the drift log.
+- Every operation is written to `edit_events` (section 7), with the raw text, round number and before and after values. This is the drift log.
 
 **Approve and reject**
-- ✅ sets status to `APPROVED` and stores the final asset paths. In Phase 1 the bot sends the final PNGs and captions back as files, ready to post by hand.
+- ✅ sets status to `APPROVED`, stores the final asset paths and moves the `schedule` row to `QUEUED` (listing status `SCHEDULED`). ⏩ Now queues it for immediate posting. ⏭ Skip keeps it `APPROVED` with no slot.
+- At slot time (Phases 1 and 2) the bot sends a reminder with the final files and captions, and the admin posts by hand: Business Suite for IG and FB, the TikTok app or TikTok Studio for TikTok. The admin replies `posted P-0007` or taps Posted, and the row becomes `POSTED` (listing `LIVE`). If it isn't marked within 2 hours, it becomes `MISSED` and the bot asks whether to re-slot it.
 - ❌ asks for a one-line reason (optional), sets `REJECTED` and logs the reason as drift with op `reject`.
 
-**Done when:** three real items have gone from drop to approved PNGs, at least one through an edit round, and `edit_events` holds the edits.
+**Done when:** three real items have gone from drop to approved PNGs, at least one through an edit round, `edit_events` holds the edits, and one full week of slots has run with reminders, `posted` marks and the Monday and daily queue messages.
 
 ---
 
@@ -122,7 +125,7 @@ If the price is missing, the bot asks for it. The bot never guesses a price.
 **Recall check.** Replace the CPSC client stub with a real lookup on brand and model. PASS / REVIEW / BLOCK goes into `safety_verdicts`. Unknown counts as REVIEW and needs an explicit admin override.
 
 **Video (FFmpeg, `render_reel`)**
-- 9:16 1080x1920 MP4, 12 to 20 seconds, 30 fps, H.264 `-preset veryfast`, AAC silent track or royalty-free bed from `assets/audio/` (operator-supplied files only).
+- 9:16 1080x1920 MP4, 15 to 30 seconds (fits both TikTok's 15 to 45 s target and Reels under 60 s), 30 fps, H.264 `-preset veryfast`, rendered with no music. Sound is added at posting from each platform's own library (Instagram audio; TikTok's Commercial Music Library on the Business account). Never post a watermarked TikTok as a Reel or the reverse.
 - Pan-and-zoom over each photo (about 3 seconds each), with price and code on the opening frame and the CTA on the closing frame.
 - Captions burned in, using the same brand fonts as the static templates.
 - Optional later: edge-tts voiceover (sw-KE or en-KE voices), off by default.
@@ -138,7 +141,8 @@ If the price is missing, the bot asks for it. The bot never guesses a price.
 - Instagram: post the feed image (or a carousel of the rendered feed graphic plus the raw photos) and the Reel through the Instagram Content Publishing API. Publish the story through the API if the account supports it; otherwise send it to the admin's phone to post.
 - Facebook Page: photo post through the Graph API with the same caption.
 - TikTok: the bot sends the MP4 and TikTok caption to the admin, who posts it from the TikTok app. Revisit the Content Posting API once an audited app is worth the effort, because unaudited apps can only post privately.
-- Option: `✅ later 18:30` schedules the post for that time. The bot runs the job and confirms after posting.
+- Timing comes from the calendar: the `cal tick` job publishes each `QUEUED` row at its slot. ⏩ Now publishes straight away, and `✅ later 18:30` stays as a manual override. Content posts (`/post teaser|tip|behind`) publish the same way.
+- The reminder from Phases 1 and 2 is replaced by a confirmation with links. TikTok still arrives as a reminder with files, because it is posted by hand.
 - Each publication is written to `publications` with platform, post ID and URL. The bot replies with the links.
 - On an API failure, the bot retries once, then sends the files for manual posting and logs the error. It never retries in a loop.
 
@@ -211,6 +215,7 @@ If the price is missing, the bot asks for it. The bot never guesses a price.
 ### Phase 6: Learning loop
 
 - **Weekly report (Sunday 19:00, before the Sunday review):** top edit operations from drift, approval rate on the first preview, model ID corrections, sell-through and days to sell by category, boost verdicts, cost per conversation and per sale. Also exported as CSV in `data/exports/` to upload to the Claude Project for strategy review.
+- **Best times:** a section of the weekly report reads Instagram Insights online-follower hours and per-slot results, and proposes edits to `config/calendar.yaml` (for example "move `listing` to 13:00"). Accepting goes through `defaults_history`. Slot times are first reviewed after two weeks of data.
 - **Default proposals:** when the same edit appears 3 or more times in 2 weeks (for example, enlarging the price badge), the report proposes changing the default. The admin taps Accept, the template or config changes, the template version goes up, and the change is logged in `defaults_history`.
 - **Price-drop nudges:** after 5 days unsold, the bot proposes a drop (default 10 to 15%) or a bundle with another live item, and the admin taps yes or no. Never automatic.
 - **Drop list broadcast:** a weekly "Thursday drop" message to opted-in contacts only, drafted by the bot and sent after admin approval, at a few messages a minute, never in bulk.
@@ -219,7 +224,90 @@ If the price is missing, the bot asks for it. The bot never guesses a price.
 
 ---
 
-## 4. Telegram interface
+## 4. Content calendar
+
+Every approved post gets a proposed slot, scheduled messages keep the week full, and slot
+times move as the data comes in. Nobody has to remember the weekly rhythm.
+
+### Weekly rhythm (Nairobi time)
+
+| Day | IG + FB | TikTok | Slot kind |
+|---|---|---|---|
+| Mon 19:00 | "This week's finds" teaser carousel | Same, as a photo post | `teaser` |
+| Tue 12:30 | Declutter listings, batch 1 | Listings as photo posts | `listing` |
+| Wed 19:00 | Parent help (size guide, carrier fitting, how we recall-check) | Native video of the tip | `tip` |
+| Thu 19:00 | **The Drop**: our picks carousel + Reel | Drop video | `drop` |
+| Fri 12:30 | Declutter listings, batch 2 | Listings as photo posts | `listing` |
+| Sat 12:30 | Behind the scenes, pickups, buyer reviews (with consent) | Native video: haul / "what KES 2,000 gets you" | `behind` |
+| Sun | No posts. Weekly review. | No posts | none |
+
+Weekly volume: 5 IG/FB feed posts plus daily Stories; 5 TikToks (3 photo posts from the
+same shoot, 2 native videos). The 12:30 and 19:00 times are starting guesses, reviewed after
+two weeks of Insights data (Phase 6).
+
+### Config: `config/calendar.yaml`
+
+This file is the calendar. Changing the rhythm means editing it or accepting a Phase 6
+proposal that edits it. No slot times are hard-coded anywhere else.
+
+```yaml
+timezone: Africa/Nairobi
+channels: [instagram, facebook, tiktok]
+slots:
+  drop:     {days: [thu], time: "19:00", max: 6}        # own picks (P-codes)
+  listing:  {days: [tue, fri], time: "12:30", max: 4}   # seller listings (L-codes)
+  teaser:   {days: [mon], time: "19:00", max: 1}
+  tip:      {days: [wed], time: "19:00", max: 1}
+  behind:   {days: [sat], time: "12:30", max: 1}
+blackout_days: [sun]
+min_gap_minutes: 90          # between two feed posts on the same channel
+lookahead_days: 14
+specials:                    # one-off dated slots that override the weekly rhythm
+  - {date: 2026-11-27, kind: listing, time: "12:30", label: "Black Friday roundup"}
+  - {date: 2026-12-03, kind: drop,    time: "19:00", label: "Drop 3, gift edition"}
+```
+
+### Module: `src/baby_arb/marketing/calendar.py` (deterministic, no model calls)
+
+- `load_config() -> CalendarConfig`, validated with pydantic.
+- `slot_kind_for(listing) -> str`: P-code → `drop`, L-code → `listing`.
+- Content posts (teaser, tip, behind) start with `/post <kind>` (photos or video plus one line). They get codes `C-000N` and go through the same render, preview, edit and approve loop, without pricing or recall steps.
+- `next_free_slot(kind, after=now) -> Slot`: the earliest slot of that kind within `lookahead_days` where the filled count is below `max`, not on a blackout day, and respecting `min_gap_minutes`. Specials count as slots of their kind on their date.
+- `week_view(start) -> list[SlotStatus]`: filled, empty and capacity per slot, for the Monday message and `/week`.
+- Handles a full slot (roll to the next day of that kind), a full week (roll to the next week), Nairobi time with no DST, and a slot already in the past (skip it).
+
+### Scheduled jobs (Hermes cron, Nairobi time)
+
+| When | Message to "babyReShop Ops" |
+|---|---|
+| Every 5 min | `baby-arb mkt cal tick`: fire due reminders or publishes, mark `MISSED` |
+| Mon 08:00 | This week's slots: filled, empty, which slots need stock |
+| Daily 18:30 | Tomorrow's queue, so either admin can change anything the night before |
+| Wed 18:00 | "Drop tomorrow: N slots still empty" (only if the drop is under half full) |
+| Slot time | Phases 1 and 2: reminder with files to post. Phase 3 on: publish, then confirm with links |
+| Slot + 2 h | Phases 1 and 2: `MISSED` nudge if not marked posted |
+| Sun 16:00 | Sunday review prompt (feeds the Phase 6 weekly report at Sun 19:00) |
+
+Jobs send nothing when there is nothing to say. `/pause` stops them all. Nothing is queued
+without an admin approve, and either admin can approve, move or skip.
+
+### Format rules the renderer must respect
+
+| | IG + FB | TikTok |
+|---|---|---|
+| Listing photos | Carousel 4:5, 1080x1350 | Photo post 9:16, 1080x1920 |
+| Video | Reel 9:16, under 60 s | 9:16, 15 to 45 s, never a watermarked repost |
+| Caption | Brand, model, price in line 1 | Title with item and price, short description |
+| Hashtags | 5 or fewer | 3 to 5 |
+| Sound | Instagram's own audio | Commercial Music Library only (Business account) |
+
+### Before the bot exists
+
+The same Telegram group works by hand from this week: drop photos there, either admin (or the
+`babyreshop-drop-to-draft` skill) builds the post, and it is scheduled in Business Suite at the
+slot time from the rhythm table. TikTok goes up from its app or TikTok Studio.
+
+## 5. Telegram interface
 
 **Chats:** a private group "babyReShop Ops" with both admins and the bot. The admin allow-list applies to commands and buttons.
 
@@ -227,6 +315,12 @@ If the price is missing, the bot asks for it. The bot never guesses a price.
 ```
 (album + caption)           new listing
 /stock                      live listings, days posted, status
+/week                       this week's slots: filled / empty / capacity
+/post teaser|tip|behind     start a content post, slotted to its day
+/slots                      show calendar.yaml (edits only by file or accepted proposal)
+move P-0007 fri 19:00       move to a slot (warns if over max or off-rhythm)
+skip P-0007                 take off the calendar, keep APPROVED
+posted P-0007               mark a manual post done (Phases 1-2)
 /item P-0007                listing card with buttons
 sold P-0007 [price] [ch]    mark sold
 collected P-0007            close sale
@@ -239,9 +333,10 @@ price P-0007 1800           change price (re-render offered)
 /pause  /resume             stop or start automatic T0 replies and scheduled jobs
 ```
 
-**Listing card buttons:** ✅ Approve · ✏️ Edit · ❌ Reject · 💰 Price · 🏷 SOLD · 📊 Stats.
+**Preview card buttons:** ✅ Approve (takes the proposed slot) · ✏️ Edit · ❌ Reject · ⏩ Now · 🕒 Move · ⏭ Skip.
+**Listing card buttons:** 💰 Price · 🏷 SOLD · 📊 Stats · ✅ Posted (Phases 1-2).
 
-## 5. Listing lifecycle
+## 6. Listing lifecycle
 
 ```
 INTAKE -> SCREENED -(BLOCK)-> BLOCKED
@@ -249,13 +344,19 @@ INTAKE -> SCREENED -(BLOCK)-> BLOCKED
 SCREENED -> RENDERED -> PREVIEW <-> EDITING
 PREVIEW -> REJECTED
 PREVIEW -> APPROVED -> SCHEDULED -> LIVE
+APPROVED -> APPROVED (skip: no slot)
+SCHEDULED -> APPROVED (missed, not re-slotted)
 LIVE -> SOLD -> COLLECTED -> ARCHIVED
 SOLD -> LIVE (back)
 LIVE -> ARCHIVED (withdrawn)
 ```
 Every transition is written to `listing_events` with actor (admin ID or `system`) and time.
 
-## 6. Data model (SQLite, one database)
+`SCHEDULED` points at a `schedule` row, which has its own states:
+`PROPOSED -> QUEUED -> POSTED`, `QUEUED -> MISSED -> QUEUED (re-slotted) | SKIPPED`, `PROPOSED|QUEUED -> SKIPPED`.
+Schedule transitions are also logged to `listing_events`.
+
+## 7. Data model (SQLite, one database)
 
 Extend the posting module's store. Claude Code reconciles names with what exists and keeps existing data.
 
@@ -277,12 +378,13 @@ Extend the posting module's store. Claude Code reconciles names with what exists
 | `sellers` | id, name, whatsapp, consent_share, created_at, purge_after |
 | `seller_fees` | listing_code, seller_id, fee, mpesa_ref, paid_at |
 | `contacts` | id, name, channel, handle_or_phone, opt_in, opt_in_at, interest_stage, last_purchase_code |
-| `defaults_history` | key, old_value, new_value, reason, accepted_by, at |
+| `schedule` | id, listing_code (P-/L-/C-), kind, slot_at, channels, status (PROPOSED/QUEUED/POSTED/SKIPPED/MISSED), proposed_by (system/admin), moved_from, reminded_at, created_at |
+| `defaults_history` | key (including `calendar.*`), old_value, new_value, reason, accepted_by, at |
 | `llm_calls` | purpose, model, tokens_in, tokens_out, cost_usd, at |
 
 No children's names or birth dates are stored. `interest_stage` is a coarse band such as "0-6m".
 
-## 7. Repo layout
+## 8. Repo layout
 
 ```
 baby-arb-ke/
@@ -298,6 +400,7 @@ baby-arb-ke/
         reel.py              FFmpeg pan-and-zoom -> MP4
         checks.py            creative checks (baby-creative-eval)
       edits.py               plain words -> edit operations, apply, log drift
+      calendar.py            slots, next_free_slot, week_view, tick (deterministic)
       publish/
         meta.py              IG + FB Graph API
         tiktok.py            manual handoff now, API later
@@ -312,6 +415,8 @@ baby-arb-ke/
       reports/
         weekly.py            drift + performance report, CSV export
       llm.py                 single gateway for all model calls, daily cap, logging
+  config/
+    calendar.yaml            the content calendar (section 4)
   assets/
     raw/  templates/  ready/  audio/  fonts/
   knowledge/
@@ -333,7 +438,7 @@ baby-arb-ke/
 | `baby-weekly-report` | Sunday report and default proposals |
 | `baby-resale-swipe` | Weekly Ad Library read (Phase 6) |
 
-## 8. CLI (what Hermes and the bot call)
+## 9. CLI (what Hermes and the bot call)
 
 ```
 baby-arb mkt intake --album <dir> --line "<caption>"
@@ -342,6 +447,11 @@ baby-arb mkt edit <code> --text "<admin words>"
 baby-arb mkt approve <code> [--at HH:MM]
 baby-arb mkt publish <code>
 baby-arb mkt sold|collected|back <code> [...]
+baby-arb mkt cal next <kind>
+baby-arb mkt cal week [--start YYYY-MM-DD]
+baby-arb mkt cal assign <code> [--at "fri 19:00"]
+baby-arb mkt cal move|skip|posted <code> [...]
+baby-arb mkt cal tick                  cron every 5 min; idempotent
 baby-arb mkt ads pull | ads rules | ads verdict <ad_id>
 baby-arb mkt inbox pull | inbox reply <conv_id> --text "..."
 baby-arb mkt report weekly [--export]
@@ -349,7 +459,7 @@ baby-arb bot run
 ```
 Every command works without Telegram, so it can be tested and run by hand.
 
-## 9. Where models are used (and nowhere else)
+## 10. Where models are used (and nowhere else)
 
 | Purpose | Phase | Input | Output |
 |---|---|---|---|
@@ -363,15 +473,18 @@ Every command works without Telegram, so it can be tested and run by hand.
 
 All calls go through `marketing/llm.py`, which enforces `LLM_DAILY_CAP_USD`, logs to `llm_calls` and degrades without failing: when over the cap, the bot asks the admin instead of calling the model.
 
-## 10. Testing and quality
+## 11. Testing and quality
 
 - Unit tests for intake parsing, pricing warnings, stop rules, tiering, state transitions.
+- Calendar: a full slot rolls to the next day of that kind; a full week rolls to next week; blackout day; past slot skipped; specials honoured; `min_gap_minutes` enforced; `move` over `max` warns but allows.
+- `cal tick` is idempotent: running it twice never double-posts or double-reminds.
+- Golden test of the Monday week-view message.
 - Golden-image tests for templates: render fixtures and compare against stored PNGs within a tolerance.
 - Fixture-based tests for edit parsing (20 or more real phrasings to expected operations).
 - Meta and Telegram clients mocked in tests. A `--dry-run` flag on publish and reply commands.
-- ruff and mypy strict clean, Conventional Commits, `dev` branch, one PR per phase.
+- ruff and mypy strict clean, Conventional Commits, `task/<slug>` branches, one PR per phase.
 
-## 11. Operator setup checklist (done by hand)
+## 12. Operator setup checklist (done by hand)
 
 - [ ] Telegram: create the bot with BotFather, create the "babyReShop Ops" group, add both admins.
 - [ ] Facebook Page linked to @babyreshopke (Settings > Linked accounts), Page added to the business portfolio.
@@ -381,7 +494,7 @@ All calls go through `marketing/llm.py`, which enforces `LLM_DAILY_CAP_USD`, log
 - [ ] Model provider for Hermes chosen and daily cap set.
 - [ ] Brand fonts and logo in `assets/fonts/` and `assets/templates/`.
 
-## 12. Open decisions
+## 13. Open decisions
 
 | Decision | Default until decided |
 |---|---|
@@ -392,22 +505,27 @@ All calls go through `marketing/llm.py`, which enforces `LLM_DAILY_CAP_USD`, log
 | Shop WhatsApp number | None yet; WhatsApp stays manual |
 | Buffer | Dropped in favour of Meta's API; revisit for TikTok scheduling |
 | Model provider and daily cap | Operator's existing Hermes provider, USD 1/day |
+| Slot times | 12:30 and 19:00 as in section 4, reviewed after two weeks of Insights |
 | Stop-rule thresholds | As in Phase 4, reviewed after the first 3 boosts |
 
-## 13. Kickoff prompt for Claude Code (Phase 0 + 1)
+## 14. Kickoff prompt for Claude Code (Phase 0 + 1)
 
 ```
 Read CLAUDE.md, AGENTS.md, SOUL.md, docs/architecture.md, src/baby_arb/posting/
 and docs/marketing/ENGINE_SPEC.md. The spec wins where docs disagree.
 
-Plan first, no code: Phase 0 and Phase 1 only.
+Plan first, no code: Phase 0 and Phase 1 only. Phase 1 includes the content
+calendar (section 4): config/calendar.yaml, calendar.py, the schedule table,
+the slot line and Approve/Now/Move/Skip buttons, the move, skip, posted,
+/week and /post commands, and `baby-arb mkt cal tick` on Hermes cron with the
+Monday, daily, Wednesday and Sunday messages. Phase 1 sends reminders with files at slot time.
 1. Settle the Hermes-gateway vs thin-bot decision (section 3, Phase 0) and say why.
-2. Map section 6 tables onto the posting store; list migrations.
+2. Map section 7 tables onto the posting store; list migrations.
 3. List files to create under src/baby_arb/marketing/ for these phases.
 4. Test plan, including golden-image and edit-parsing fixtures.
 Rules: admin price is never changed; BLOCK is never approvable; no publishing,
 no Meta calls and no messages to buyers in these phases; all model calls go
 through marketing/llm.py with the daily cap.
-After I approve the plan, build on dev, keep ruff/mypy strict and CI green,
+After I approve the plan, build on task/<slug> branches (never main), keep ruff/mypy strict and CI green,
 and open one PR per phase.
 ```
