@@ -9,6 +9,7 @@ import json
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 from baby_arb.models.candidate import BuyCandidate
 from baby_arb.models.compliance import ComplianceVerdictKind
@@ -23,14 +24,15 @@ class KebsResult:
 
 
 @lru_cache(maxsize=1)
-def _load_kebs_rules() -> dict:
+def _load_kebs_rules() -> dict[str, Any]:
     """Load KEBS restricted items list. Cached after first load."""
     if not KEBS_FILE.exists():
         # Permissive default if file missing — but log it.
         # Production should always have this file present.
         return {"blocked": [], "review": []}
     with KEBS_FILE.open() as f:
-        return json.load(f)
+        rules: dict[str, Any] = json.load(f)
+        return rules
 
 
 def check_kebs_restricted(candidate: BuyCandidate) -> KebsResult:

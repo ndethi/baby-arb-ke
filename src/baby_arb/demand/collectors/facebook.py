@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import structlog
 
 from baby_arb.demand.collectors.base import BaseCollector
@@ -21,7 +23,7 @@ class FacebookCollector(BaseCollector):
     def __init__(self, rate_limit_per_second: float = 0.5):
         super().__init__("facebook", rate_limit_per_second)
 
-    async def collect(self, product_name: str, **kwargs) -> DemandSignals:
+    async def collect(self, product_name: str, **kwargs: Any) -> DemandSignals:
         """Collect demand signals from Facebook groups.
 
         Returns UNKNOWN: there is no login-free source for group posts.

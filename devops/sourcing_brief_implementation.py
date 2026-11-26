@@ -51,7 +51,7 @@ async def generate_sourcing_brief(dry_run: bool = True) -> str:
     if margin_eval_path.exists():
         reports = list(margin_eval_path.glob("margin_report_*.json"))
         # Sort by date in filename (newest first)
-        def extract_date(report_path):
+        def extract_date(report_path: Path) -> str:
             match = re.search(r'(\d{4}-\d{2}-\d{2})', report_path.name)
             return match.group(1) if match else "0000-00-00"
         sorted_reports = sorted(reports, key=extract_date, reverse=True)
@@ -208,7 +208,7 @@ PRIORITY ITEMS
         brief_content += "- No items to avoid this week based on demand signals\n\n"
 
     brief_content += "\nASSUMPTIONS\n\n"
-    if fx_rate is not None:
+    if fx_rate is not None and fx_age_hours is not None:
         brief_content += f"- FX {fx_rate} KES/USD from the pricing FX cache, {float(fx_age_hours):.1f}h old\n"
     else:
         brief_content += "- FX rate UNKNOWN: no target landed costs computed\n"

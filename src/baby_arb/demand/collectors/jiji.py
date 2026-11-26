@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import structlog
 
 from baby_arb.demand.collectors.base import BaseCollector
@@ -21,7 +23,7 @@ class JijiCollector(BaseCollector):
         super().__init__("jiji", rate_limit_per_second)
         self.base_url = "https://jiji.co.ke"
 
-    async def collect(self, product_name: str, **kwargs) -> DemandSignals:
+    async def collect(self, product_name: str, **kwargs: Any) -> DemandSignals:
         """Collect demand signals from Jiji.
 
         Returns UNKNOWN until the daily HTML snapshot collector (Phase 2) exists.
