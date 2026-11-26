@@ -46,3 +46,25 @@
   check now enforces subject case, blank line and 100-char body lines like commitlint.
 
 **Outcome:** see commits on this branch. Stacked on `task/phase0-no-demo-data` (gate tooling).
+
+## 2026-11-26 · Claude Code (claude-opus-5-5)
+
+**Prompt** (verbatim; secrets redacted):
+> im going to give you these credentials here:
+> telegram_bot_token =[REDACTED]
+> telegram admin ids - we'll start with mine then hopefully we could add others later = how do i get this id,
+> telegram_ops chat id - tell me how to get this as well - group is ready
+> copy the nvidia api key and openrouter api keys from current hermes .env
+
+**Decisions:**
+- Wrote the bot token and the two keys from `~/.hermes/.env` into the repo's gitignored `.env`
+  (mode 600, backup kept in the session scratchpad). No values printed or committed.
+- `getMe` confirms the bot (@brske_bot); privacy mode is on, so in groups it only sees commands.
+- Live `mkt llm-check` found: NVIDIA returns 410 for the retired `nemotron-3-super-120b-a12b`
+  and 403 "Authorization failed" for current models with this key; OpenRouter works but
+  Nemotron reasons by default, so a 10-token budget returned `content: null`, which llm.py
+  turned into the text "None". Fixes: OpenRouter primary with `reasoning.enabled=false`
+  (LLM_REASONING to opt in), NVIDIA fallback on `nemotron-3.5-super-vl-120b-a12b`, empty
+  completions count as errors. Did not try the Hermes profile keys (not authorised).
+
+**Outcome:** llm-check passes on OpenRouter (2 output tokens). Admin and ops chat IDs pending.

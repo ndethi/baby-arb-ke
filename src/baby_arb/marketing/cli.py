@@ -47,7 +47,7 @@ def llm_check() -> None:
     if result.degraded:
         console.print(f"[yellow]Degraded: {result.reason}[/yellow]")
         raise typer.Exit(code=1)
-    console.print(f"[green]{result.provider} / {result.model}:[/green] {result.text}")
+    console.print(f"[green]{result.provider} / {result.model}:[/green] {result.text}", emoji=False)
 
 
 def db_upgrade(

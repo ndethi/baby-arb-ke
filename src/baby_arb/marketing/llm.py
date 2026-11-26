@@ -1,7 +1,8 @@
 """The single gateway for every model call (ENGINE_SPEC section 10).
 
-- Providers are OpenAI-compatible chat endpoints: NVIDIA's hosted API (free
-  Nemotron) first, OpenRouter's free tier as the fallback.
+- Providers are OpenAI-compatible chat endpoints: OpenRouter's free Nemotron
+  first (reasoning off unless LLM_REASONING=true), NVIDIA's hosted API as the
+  fallback. An empty completion counts as an error.
 - Before each call the daily cap is checked: total cost against
   LLM_DAILY_CAP_USD and call count against LLM_DAILY_CALL_CAP, per Nairobi
   calendar day. Over the cap no call is made.
@@ -144,16 +145,20 @@ def complete(
                 if not key or not base:
                     errors.append(f"{provider}: not configured")
                     continue
+                payload: dict[str, Any] = {
+                    "model": model,
+                    "messages": list(messages),
+                    "max_tokens": max_tokens,
+                    "temperature": temperature,
+                }
+                if provider == "openrouter":
+                    # Nemotron "thinks" by default and can spend the whole budget on it.
+                    payload["reasoning"] = {"enabled": settings.llm_reasoning}
                 try:
                     resp = http.post(
                         f"{base}/chat/completions",
                         headers={"Authorization": f"Bearer {key}"},
-                        json={
-                            "model": model,
-                            "messages": list(messages),
-                            "max_tokens": max_tokens,
-                            "temperature": temperature,
-                        },
+                        json=payload,
                     )
                     resp.raise_for_status()
                     body = resp.json()
@@ -161,6 +166,8 @@ def complete(
                     usage = body.get("usage") or {}
                     tokens_in = int(usage.get("prompt_tokens", 0))
                     tokens_out = int(usage.get("completion_tokens", 0))
+                    if not isinstance(text, str) or not text.strip():
+                        raise ValueError("empty completion (token budget spent or no content)")
                 except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError) as exc:
                     message = f"{type(exc).__name__}: {str(exc)[:200]}"
                     errors.append(f"{provider}: {message}")
@@ -170,7 +177,7 @@ def complete(
                 _log(session, purpose=purpose, provider=provider, model=model, status="ok",
                      tokens_in=tokens_in, tokens_out=tokens_out,
                      cost_usd=_cost(settings, tokens_in, tokens_out), at=now)
-                return LLMResult(str(text), False, None, provider, model)
+                return LLMResult(text.strip(), False, None, provider, model)
         finally:
             if owns_client:
                 http.close()

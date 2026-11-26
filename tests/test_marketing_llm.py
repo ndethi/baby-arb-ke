@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from decimal import Decimal
 
 import httpx
+import pytest
 import respx
 from baby_arb.config import Settings
 from baby_arb.marketing.llm import PROVIDERS, complete
@@ -43,29 +45,45 @@ def _rows(engine):
 
 @respx.mock
 def test_primary_success_is_logged(db_engine):
-    respx.post(f"{PROVIDERS['nvidia']}/chat/completions").mock(return_value=_ok())
+    route = respx.post(f"{PROVIDERS['openrouter']}/chat/completions").mock(return_value=_ok())
     result = complete("test", MSGS, settings=_settings(), engine=db_engine, now=NOW)
     assert not result.degraded
     assert result.text == "ready"
-    assert result.provider == "nvidia"
+    assert result.provider == "openrouter"
+    sent = json.loads(route.calls.last.request.content)
+    assert sent["reasoning"] == {"enabled": False}
     [row] = _rows(db_engine)
     assert (row.status, row.tokens_in, row.tokens_out) == ("ok", 10, 2)
 
 
 @respx.mock
-def test_falls_back_to_openrouter_on_error(db_engine):
-    respx.post(f"{PROVIDERS['nvidia']}/chat/completions").mock(return_value=httpx.Response(503))
-    respx.post(f"{PROVIDERS['openrouter']}/chat/completions").mock(return_value=_ok("ok2"))
+def test_falls_back_to_nvidia_on_error(db_engine):
+    respx.post(f"{PROVIDERS['openrouter']}/chat/completions").mock(return_value=httpx.Response(503))
+    nv = respx.post(f"{PROVIDERS['nvidia']}/chat/completions").mock(return_value=_ok("ok2"))
     result = complete("test", MSGS, settings=_settings(), engine=db_engine, now=NOW)
     assert result.text == "ok2"
-    assert result.provider == "openrouter"
+    assert result.provider == "nvidia"
     assert [r.status for r in _rows(db_engine)] == ["error", "ok"]
+    assert "reasoning" not in json.loads(nv.calls.last.request.content)
+
+
+@respx.mock
+@pytest.mark.parametrize("content", [None, "", "   "])
+def test_empty_completion_is_an_error_not_text(db_engine, content):
+    respx.post(f"{PROVIDERS['openrouter']}/chat/completions").mock(
+        return_value=httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
+    )
+    respx.post(f"{PROVIDERS['nvidia']}/chat/completions").mock(return_value=httpx.Response(403))
+    result = complete("test", MSGS, settings=_settings(), engine=db_engine, now=NOW)
+    assert result.degraded
+    assert result.text is None
+    assert "empty completion" in (result.reason or "")
 
 
 @respx.mock
 def test_all_providers_down_degrades_without_raising(db_engine):
-    respx.post(f"{PROVIDERS['nvidia']}/chat/completions").mock(side_effect=httpx.ConnectError("x"))
-    respx.post(f"{PROVIDERS['openrouter']}/chat/completions").mock(return_value=httpx.Response(429))
+    respx.post(f"{PROVIDERS['openrouter']}/chat/completions").mock(side_effect=httpx.ConnectError("x"))
+    respx.post(f"{PROVIDERS['nvidia']}/chat/completions").mock(return_value=httpx.Response(429))
     result = complete("test", MSGS, settings=_settings(), engine=db_engine, now=NOW)
     assert result.degraded
     assert result.text is None
@@ -74,7 +92,7 @@ def test_all_providers_down_degrades_without_raising(db_engine):
 
 @respx.mock
 def test_call_cap_blocks_further_calls(db_engine):
-    route = respx.post(f"{PROVIDERS['nvidia']}/chat/completions").mock(return_value=_ok())
+    route = respx.post(f"{PROVIDERS['openrouter']}/chat/completions").mock(return_value=_ok())
     for _ in range(3):
         assert not complete("t", MSGS, settings=_settings(), engine=db_engine, now=NOW).degraded
     capped = complete("t", MSGS, settings=_settings(), engine=db_engine, now=NOW)
@@ -86,7 +104,7 @@ def test_call_cap_blocks_further_calls(db_engine):
 
 @respx.mock
 def test_cost_cap_blocks_paid_models(db_engine):
-    respx.post(f"{PROVIDERS['nvidia']}/chat/completions").mock(
+    respx.post(f"{PROVIDERS['openrouter']}/chat/completions").mock(
         return_value=_ok(tin=1_000_000, tout=0)
     )
     paid = _settings(llm_price_in_per_mtok=Decimal("2"), llm_daily_call_cap=100)
@@ -96,7 +114,7 @@ def test_cost_cap_blocks_paid_models(db_engine):
 
 @respx.mock
 def test_cap_resets_at_nairobi_midnight(db_engine):
-    respx.post(f"{PROVIDERS['nvidia']}/chat/completions").mock(return_value=_ok())
+    respx.post(f"{PROVIDERS['openrouter']}/chat/completions").mock(return_value=_ok())
     late = datetime(2026, 11, 21, 20, 30, tzinfo=UTC)  # 23:30 Nairobi
     for _ in range(3):
         complete("t", MSGS, settings=_settings(), engine=db_engine, now=late)

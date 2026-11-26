@@ -57,10 +57,11 @@ class Settings(BaseSettings):
     meta_system_user_token: str | None = None
     meta_ad_account_id: str | None = None
 
-    llm_provider: str = "nvidia"  # nvidia | openrouter
-    llm_model: str = "nvidia/nemotron-3-super-120b-a12b"
-    llm_fallback_provider: str | None = "openrouter"
-    llm_fallback_model: str | None = "nvidia/nemotron-3.5-super-vl:free"
+    llm_provider: str = "openrouter"  # openrouter | nvidia
+    llm_model: str = "nvidia/nemotron-3.5-super-vl:free"
+    llm_fallback_provider: str | None = "nvidia"
+    llm_fallback_model: str | None = "nvidia/nemotron-3.5-super-vl-120b-a12b"
+    llm_reasoning: bool = False  # OpenRouter reasoning; off keeps short answers short
     llm_daily_cap_usd: Decimal = Field(default=Decimal("1"))
     # Free-tier models cost $0, so a call-count cap also protects rate limits.
     llm_daily_call_cap: int = 200
