@@ -35,16 +35,20 @@ def _run(fn: Callable[[Any], T]) -> T:
 
     from baby_arb.marketing import pipeline as pl
     from baby_arb.marketing.calendar import load_config
+    from baby_arb.marketing.lookup import make_lookup
     from baby_arb.marketing.render.static import render_listing
     from baby_arb.posting.tables import utcnow
     from baby_arb.storage.db import get_engine
 
     settings = get_settings()
-    with Session(get_engine(settings.database_url)) as session:
+    engine = get_engine(settings.database_url)
+    with Session(engine) as session:
         ctx = pl.Context(
             session=session, cfg=load_config(), assets_dir=Path(settings.marketing_assets_dir),
             actor="cli", now=utcnow(),
             renderer=partial(render_listing, channel=settings.render_browser_channel),
+            lookup=make_lookup(settings.brave_search_api_key, engine,
+                               settings.brave_daily_call_cap),
         )
         try:
             return fn(ctx)
@@ -69,6 +73,8 @@ def _show(result: object) -> None:
                       emoji=False)
         for line in result.echo:
             console.print(f"  applied: {line}", emoji=False)
+        for line in result.info:
+            console.print(f"  info: {line}", emoji=False)
         for line in result.warnings + result.issues:
             console.print(f"  [yellow]! {line}[/yellow]", emoji=False)
         for path in result.assets:

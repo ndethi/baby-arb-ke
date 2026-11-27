@@ -29,6 +29,7 @@ from baby_arb.marketing import pipeline as pl
 from baby_arb.marketing.bot.auth import Access
 from baby_arb.marketing.bot.cards import HELP, Album, Out, Text, step_messages
 from baby_arb.marketing.calendar import CONTENT_KINDS, CalendarConfig, format_week, week_view
+from baby_arb.marketing.lookup import LookupResult
 from baby_arb.marketing.render.static import RenderError
 from baby_arb.marketing.tick import Notifier, tick
 from baby_arb.posting.store import get_flag, set_flag
@@ -59,6 +60,7 @@ class BotDeps:
     ops_chat_id: int | None
     renderer: pl.Renderer
     completer: pl.Completer
+    lookup: Callable[[str, str | None], LookupResult] | None = None
     notifier_factory: Callable[[], Notifier] | None = None
     tick_enabled: bool = True
 
@@ -98,7 +100,7 @@ def _in_session(deps: BotDeps, actor: str, fn: Callable[[pl.Context], T]) -> T:
     with Session(deps.engine) as session:
         ctx = pl.Context(session=session, cfg=deps.load_cfg(), assets_dir=deps.assets_dir,
                          actor=actor, now=utcnow(), renderer=deps.renderer,
-                         completer=deps.completer)
+                         completer=deps.completer, lookup=deps.lookup)
         return fn(ctx)
 
 
@@ -299,6 +301,8 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         result = await run_flow(deps, actor, lambda ctx: pl.override(ctx, code))
     elif action == "posted":
         result = await run_flow(deps, actor, lambda ctx: pl.posted(ctx, code))
+    elif action == "useref":
+        result = await run_flow(deps, actor, lambda ctx: pl.use_price_ref(ctx, code))
     elif action == "reslot":
         result = await run_flow(deps, actor, lambda ctx: pl.reslot(ctx, code))
     else:

@@ -34,7 +34,8 @@ class Album:
 Out = Text | Album
 
 
-def preview_buttons(code: str, needs_check: bool = False) -> Buttons:
+def preview_buttons(code: str, needs_check: bool = False,
+                    price_ref: int | None = None) -> Buttons:
     """✅ Approve ✏️ Edit ❌ Reject / ⏩ Now 🕒 Move ⏭ Skip.
 
     With open safety review reasons the approve label says the admin checked it.
@@ -45,7 +46,7 @@ def preview_buttons(code: str, needs_check: bool = False) -> Buttons:
          ("❌ Reject", f"a:reject:{code}")],
         [("⏩ Now", f"a:now:{code}"), ("🕒 Move", f"a:move:{code}"),
          ("⏭ Skip", f"a:skip:{code}")],
-    ]
+    ] + ([[(f"Use KES {price_ref:,} as 'new from'", f"a:useref:{code}")]] if price_ref else [])
 
 
 def _card(p: Preview) -> str:
@@ -54,6 +55,8 @@ def _card(p: Preview) -> str:
     if p.echo:
         lines.append("Applied: " + "; ".join(p.echo))
     lines.append(p.slot_line)
+    for line in p.info:
+        lines.append(f"\N{INFORMATION SOURCE}\ufe0f {line}")
     for warning in p.warnings:
         lines.append(f"⚠️ {warning}")
     for issue in p.issues:
@@ -77,7 +80,7 @@ def step_messages(step: Step) -> list[Out]:
         out.append(Album(assets, caption=f"{step.code} · round {step.round}"))
     out.append(Text(f"IG + FB caption:\n\n{step.caption_ig}"))
     out.append(Text(f"TikTok caption:\n\n{step.caption_tiktok}"))
-    out.append(Text(_card(step), preview_buttons(step.code, step.needs_check)))
+    out.append(Text(_card(step), preview_buttons(step.code, step.needs_check, step.price_ref)))
     return out
 
 

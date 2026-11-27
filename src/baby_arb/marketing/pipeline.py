@@ -11,6 +11,13 @@ messages. Hard rules enforced here:
   is recorded on the verdict (`override_by`).
 - A `#test` tag (or `mark_test`) flags a listing as a test so reports and
   later phases can leave it out.
+- Phase 2 identify: when the admin gives no item name, the photos are read
+  once (identify.py). A confident result fills the title "(auto)"; otherwise
+  the bot asks "looks like X, right?". Corrections are logged as drift
+  (`correct_model`). With a Brave key the item is then looked up once
+  (lookup.py): facts with sources go into captions and the preview, and a
+  Kenyan retailer price is offered as the "new from" anchor for the admin to
+  accept. Nothing found online is used for the price.
 - Model calls go through llm.py (captions, edit parsing) and degrade to
   templates or a question.
 """
@@ -24,8 +31,10 @@ import shutil
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 from sqlmodel import Session, col, select
 
@@ -40,6 +49,7 @@ from baby_arb.marketing.calendar import (
     parse_when,
     slot_kind_for,
 )
+from baby_arb.marketing.identify import CATEGORIES, Identification, identify
 from baby_arb.marketing.intake import (
     MAX_PHOTOS,
     ParsedLine,
@@ -48,6 +58,7 @@ from baby_arb.marketing.intake import (
     price_warnings,
 )
 from baby_arb.marketing.llm import complete
+from baby_arb.marketing.lookup import LookupResult
 from baby_arb.marketing.render.layout import TEMPLATE_VERSION, Layout, dump_layout, load_layout
 from baby_arb.marketing.render.static import ListingView, RenderResult, render_listing
 from baby_arb.marketing.states import move_listing, move_schedule
@@ -107,6 +118,8 @@ class Preview:
     echo: list[str] = field(default_factory=list)
     needs_check: bool = False  # REVIEW reasons the admin confirms by approving
     is_test: bool = False
+    info: list[str] = field(default_factory=list)  # identification and looked-up facts
+    price_ref: int | None = None  # a sourced KE "new" price the admin may adopt
 
 
 @dataclass
@@ -131,6 +144,10 @@ class Context:
     now: datetime = field(default_factory=utcnow)
     renderer: Renderer = render_listing
     completer: Completer = complete
+    # Phase 2: photo identification (default: identify.py through `completer`)
+    # and online lookup (None: no Brave key, skipped).
+    identifier: Callable[[list[Path]], Identification] | None = None
+    lookup: Callable[[str, str | None], LookupResult] | None = None
 
 
 # --------------------------------------------------------------------------- helpers
@@ -198,7 +215,30 @@ def _caption_input(listing: Listing) -> cap.CaptionInput:
         ref_new_price=listing.ref_new_price,
         seller=listing.kind == "seller",
         content_kind=_content_kind(listing),
+        facts=tuple(f"{f['label']}: {f['value']}" for f in _facts(listing))[:3],
     )
+
+
+def details_of(listing: Listing) -> dict[str, Any]:
+    """listings.details as a dict."""
+    data: dict[str, Any] = json.loads(listing.details) if listing.details else {}
+    return data
+
+
+def _set_details(listing: Listing, **values: Any) -> None:
+    data = details_of(listing)
+    data.update(values)
+    listing.details = json.dumps(data)
+
+
+def _facts(listing: Listing) -> list[dict[str, str]]:
+    facts: list[dict[str, str]] = (details_of(listing).get("lookup") or {}).get("facts") or []
+    return facts
+
+
+def _price_ref(listing: Listing) -> dict[str, Any] | None:
+    ref: dict[str, Any] | None = (details_of(listing).get("lookup") or {}).get("price_ref")
+    return ref
 
 
 def _save_photos(ctx: Context, code: str, photos: list[bytes]) -> None:
@@ -286,8 +326,15 @@ def answer(ctx: Context, code: str, what: str, text: str) -> Step:
         listing.price, listing.price_source = price, "admin"
     elif what == "title":
         title = " ".join(text.split())
-        if len(title) < 3:
+        guess = (details_of(listing).get("identify") or {}).get("title")
+        if guess and title.lower().strip(" .!") in YES_WORDS:
+            title = guess
+        elif len(title) < 3:
             raise FlowError("Reply with the item, e.g. 'Graco FastAction Fold stroller'.")
+        elif guess and title.lower() != guess.lower():
+            ctx.session.add(EditEvent(listing_code=listing.code, round=listing.round,
+                                      raw_text=text, op="correct_model", target="title",
+                                      before=guess, after=title, parsed_by="admin"))
         listing.title, listing.model_source = title, "admin"
     else:
         raise FlowError(f"Nothing to answer for {what}.")
@@ -313,7 +360,9 @@ def override(ctx: Context, code: str) -> Step:
 
 
 def _screen(ctx: Context, listing: Listing) -> SafetyVerdictRow:
-    result = screen(listing.title, listing.condition_note, listing.category)
+    # Our wording for a category key (e.g. "push walker"), never the model's.
+    category = CATEGORIES.get(listing.category or "", listing.category)
+    result = screen(listing.title, listing.condition_note, category)
     row = SafetyVerdictRow(listing_code=listing.code, verdict=result.verdict,
                            reasons=json.dumps(result.reasons),
                            recall_source=result.recall_source)
@@ -341,8 +390,10 @@ def advance(ctx: Context, code: str) -> Step:
                 return Need(code, "price", f"{code}: what's the price? Reply with a number, "
                             "e.g. 2000. I never guess prices.")
             if not listing.title:
-                return Need(code, "title", f"{code}: what is it? Brand and model, e.g. "
-                            "'Graco FastAction Fold stroller'.")
+                need = _identify_once(ctx, listing)
+                if need is not None:
+                    return need
+            _lookup_once(ctx, listing)
             verdict = _screen(ctx, listing)
             if verdict.verdict == "BLOCK":
                 move_listing(ctx.session, listing, "BLOCKED", "system", verdict.reasons)
@@ -353,6 +404,86 @@ def advance(ctx: Context, code: str) -> Step:
     if listing.status == "SCREENED":
         return render_round(ctx, listing)
     raise FlowError(f"{code} is {listing.status}; nothing to advance.")
+
+
+# --------------------------------------------------------------------------- identify
+
+YES_WORDS = frozenset({"yes", "y", "yep", "yeah", "correct", "right", "ndio", "sawa", "ok"})
+
+
+def _identify_once(ctx: Context, listing: Listing) -> Need | None:
+    """Read the photos once; fill the title if confident, else ask (Need)."""
+    found = details_of(listing).get("identify")
+    if found is None:
+        photos = [p for _, p in sorted(photos_of(ctx.session, listing.code).items())]
+        ident = (ctx.identifier(photos) if ctx.identifier is not None
+                 else identify(photos, ctx.completer))
+        found = {"title": ident.title, "confidence": ident.confidence, "auto": ident.auto,
+                 "category": ident.category, "brand": ident.brand, "model": ident.model,
+                 "age_range": ident.age_range, "degraded": ident.degraded,
+                 "reason": ident.reason}
+        _set_details(listing, identify=found)
+        if not ident.degraded:
+            listing.brand, listing.model = ident.brand, ident.model
+            listing.category = ident.category
+            listing.model_confidence = Decimal(str(round(ident.confidence, 3)))
+            if listing.age_range is None and ident.age_range:
+                listing.age_range = ident.age_range
+        if ident.auto:
+            listing.title, listing.model_source = ident.title, "auto"
+        ctx.session.add(listing)
+        ctx.session.commit()
+    if listing.title:
+        return None
+    guess = found.get("title")
+    if guess:
+        words = CATEGORIES.get(found.get("category") or "", "")
+        kind = f" ({words})" if words and words.lower() not in guess.lower() else ""
+        return Need(listing.code, "title", f"{listing.code}: looks like {guess}{kind}, right? "
+                    "Reply 'yes', or the brand and model.")
+    return Need(listing.code, "title", f"{listing.code}: what is it? Brand and model, e.g. "
+                "'Graco FastAction Fold stroller'.")
+
+
+def _lookup_once(ctx: Context, listing: Listing) -> None:
+    """Look the item up online once, when a lookup is configured."""
+    if ctx.lookup is None or not listing.title or "lookup" in details_of(listing):
+        return
+    result = ctx.lookup(listing.title, listing.brand)
+    _set_details(listing, lookup=result.to_json())
+    ctx.session.add(listing)
+    ctx.session.commit()
+
+
+def _info_lines(listing: Listing) -> list[str]:
+    lines: list[str] = []
+    found = details_of(listing).get("identify") or {}
+    if listing.model_source == "auto" and listing.title:
+        pct = round(float(found.get("confidence") or 0) * 100)
+        lines.append(f"Item: {listing.title} (auto, {pct}%). Wrong? Edit: 'title <item>'.")
+    for fact in _facts(listing):
+        lines.append(f"{fact['label']}: {fact['value']} ({_host(fact['source'])})")
+    ref = _price_ref(listing)
+    if ref and ref.get("amount") != listing.ref_new_price:
+        lines.append(f"Seen new at KES {ref['amount']:,} on {_host(ref['url'])}.")
+    return lines
+
+
+def _host(url: str) -> str:
+    return (urlparse(url).hostname or url).removeprefix("www.")
+
+
+def use_price_ref(ctx: Context, code: str) -> Step:
+    """Admin adopts the looked-up KE price as the "new in Nairobi from" anchor.
+
+    Raises:
+        FlowError: nothing looked up, or the listing is not in preview.
+    """
+    listing = get_listing(ctx.session, code)
+    ref = _price_ref(listing)
+    if not ref:
+        raise FlowError(f"{listing.code} has no looked-up price.")
+    return edit(ctx, listing.code, f"ref {ref['amount']}")
 
 
 # --------------------------------------------------------------------------- render
@@ -432,6 +563,9 @@ def render_round(ctx: Context, listing: Listing, echo: list[str] | None = None,
         echo=echo or [],
         needs_check=bool(pending),
         is_test=listing.is_test,
+        info=_info_lines(listing),
+        price_ref=(ref["amount"] if (ref := _price_ref(listing))
+                   and ref.get("amount") != listing.ref_new_price else None),
     )
 
 
@@ -471,6 +605,13 @@ def edit(ctx: Context, code: str, text: str) -> Step:
         setattr(listing, key, applied.fields[key])
     if any(c.op.target == "price" for c in applied.changes if c.op.op == "set_field"):
         listing.price_source = "admin"
+    for change in applied.changes:
+        if (change.op.op == "set_field" and change.op.target == "title"
+                and listing.model_source == "auto"):
+            ctx.session.add(EditEvent(listing_code=listing.code, round=listing.round,
+                                      raw_text=text, op="correct_model", target="title",
+                                      before=change.before, after=change.after,
+                                      parsed_by=plan.parsed_by))
     if any(c.op.target == "title" for c in applied.changes if c.op.op == "set_field"):
         listing.model_source = "admin"
     listing.layout = dump_layout(applied.layout)

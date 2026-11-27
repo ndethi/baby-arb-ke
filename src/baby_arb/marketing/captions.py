@@ -42,6 +42,7 @@ class CaptionInput:
     ref_new_price: int | None = None
     seller: bool = False
     content_kind: str | None = None  # C-codes: teaser | tip | behind
+    facts: tuple[str, ...] = ()  # looked-up details with a source, e.g. "Age range: 6m+"
 
 
 @dataclass(frozen=True)
@@ -90,6 +91,8 @@ def template_captions(item: CaptionInput) -> Captions:
         detail.append(item.notes[0].upper() + item.notes[1:])
     if detail:
         lines.append(". ".join(detail) + ".")
+    if item.facts:
+        lines.append("Details: " + "; ".join(item.facts) + ".")
     if item.ref_new_price and not item.seller:
         lines.append(f"New in Nairobi from {_kes(item.ref_new_price)}.")
     if item.seller:
@@ -164,6 +167,7 @@ def _user_prompt(item: CaptionInput, template: Captions) -> str:
         "notes": item.notes,
         "new_in_nairobi_from": _kes(item.ref_new_price) if item.ref_new_price else None,
         "seller_listing": item.seller,
+        "details_from_maker_pages": list(item.facts),
         "code": item.code,
         "call_to_action": cta(item.code),
     }
