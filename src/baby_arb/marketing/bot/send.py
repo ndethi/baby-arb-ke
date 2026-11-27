@@ -8,6 +8,10 @@ already checked.
 
 from __future__ import annotations
 
+import json
+from collections.abc import Sequence
+from contextlib import ExitStack
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -15,6 +19,7 @@ import httpx
 from baby_arb.marketing.bot.auth import Access
 
 API_BASE = "https://api.telegram.org"
+MAX_ALBUM = 10
 
 
 class DestinationNotAllowedError(RuntimeError):
@@ -49,4 +54,36 @@ class OpsSender:
         resp = self._client.post(f"{API_BASE}/bot{self._token}/sendMessage", json=payload)
         resp.raise_for_status()
         result: dict[str, Any] = resp.json()["result"]
+        return result
+
+    def send_media_group(
+        self, chat_id: int, paths: Sequence[Path], caption: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Send up to 10 local images as one album; returns the sent messages.
+
+        Raises:
+            DestinationNotAllowedError: chat_id is not allow-listed.
+            ValueError: no images or more than 10.
+            httpx.HTTPStatusError: Telegram rejected the call.
+        """
+        self._check(chat_id)
+        if not 1 <= len(paths) <= MAX_ALBUM:
+            raise ValueError(f"an album holds 1 to {MAX_ALBUM} images, got {len(paths)}")
+        media: list[dict[str, Any]] = []
+        with ExitStack() as stack:
+            files: dict[str, Any] = {}
+            for i, path in enumerate(paths):
+                key = f"f{i}"
+                files[key] = (path.name, stack.enter_context(path.open("rb")), "image/png")
+                item: dict[str, Any] = {"type": "photo", "media": f"attach://{key}"}
+                if i == 0 and caption:
+                    item["caption"] = caption[:1024]
+                media.append(item)
+            resp = self._client.post(
+                f"{API_BASE}/bot{self._token}/sendMediaGroup",
+                data={"chat_id": str(chat_id), "media": json.dumps(media)},
+                files=files,
+            )
+        resp.raise_for_status()
+        result: list[dict[str, Any]] = resp.json()["result"]
         return result

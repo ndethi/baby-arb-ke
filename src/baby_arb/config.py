@@ -71,6 +71,11 @@ class Settings(BaseSettings):
     nvidia_api_key: str | None = None
     openrouter_api_key: str | None = None
 
+    # Phase 1 rendering. Photos land in <assets>/raw/<code>/, renders in
+    # <assets>/ready/<code>/r<round>/ (both gitignored).
+    marketing_assets_dir: str = "assets"
+    render_browser_channel: str | None = None  # e.g. "chrome"; default tries bundled first
+
     # Storage
     database_url: str = "sqlite:///./data/baby_arb.db"
 

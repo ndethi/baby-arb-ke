@@ -2,18 +2,32 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
+from functools import partial
+from pathlib import Path
+
 from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes, filters
+from telegram.ext import (
+    Application,
+    CallbackQueryHandler,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
 
 from baby_arb.config import Settings
+from baby_arb.marketing.bot import handlers as h
 from baby_arb.marketing.bot.auth import Access
+from baby_arb.marketing.bot.cards import HELP
+from baby_arb.marketing.bot.send import OpsSender
+from baby_arb.marketing.calendar import load_config
+from baby_arb.marketing.llm import complete
+from baby_arb.marketing.render.static import render_listing
+from baby_arb.storage.db import get_engine
 
-HELP_TEXT = (
-    "babyReShop Ops bot\n"
-    "/ping - check the bot is running\n"
-    "/help - this list\n"
-    "More commands arrive with Phase 1 (drops, previews, calendar)."
-)
+HELP_TEXT = HELP
 
 
 class BotNotConfiguredError(RuntimeError):
@@ -37,7 +51,25 @@ def admin_filter(access: Access) -> filters.BaseFilter:
     return filters.User(user_id=access.admin_ids) & filters.Chat(chat_id=access.chat_ids)
 
 
-def build_application(settings: Settings) -> Application:  # type: ignore[type-arg]
+def make_deps(settings: Settings, access: Access, tick_enabled: bool = True) -> h.BotDeps:
+    """Real dependencies from settings."""
+    token = settings.telegram_bot_token or ""
+    return h.BotDeps(
+        engine=get_engine(settings.database_url),
+        load_cfg=load_config,
+        assets_dir=Path(settings.marketing_assets_dir),
+        access=access,
+        ops_chat_id=settings.telegram_ops_chat_id,
+        renderer=partial(render_listing, channel=settings.render_browser_channel),
+        completer=complete,
+        notifier_factory=lambda: OpsSender(token, access),
+        tick_enabled=tick_enabled,
+    )
+
+
+def build_application(
+    settings: Settings, deps: h.BotDeps | None = None, tick_enabled: bool = True
+) -> Application:  # type: ignore[type-arg]
     """Create the bot application with admin-only handlers.
 
     Raises:
@@ -49,8 +81,35 @@ def build_application(settings: Settings) -> Application:  # type: ignore[type-a
     if not access.admin_ids:
         raise BotNotConfiguredError("TELEGRAM_ADMIN_IDS is empty; the bot would answer nobody")
 
-    app = Application.builder().token(settings.telegram_bot_token).build()
+    async def post_init(app: Application) -> None:  # type: ignore[type-arg]
+        # The app is not "running" yet here, so own the task and cancel it on shutdown.
+        if app.bot_data["deps"].tick_enabled:
+            app.bot_data["tick_task"] = asyncio.get_running_loop().create_task(h.tick_loop(app))
+
+    async def post_shutdown(app: Application) -> None:  # type: ignore[type-arg]
+        task = app.bot_data.get("tick_task")
+        if task is not None:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
+    app = (
+        Application.builder()
+        .token(settings.telegram_bot_token)
+        .post_init(post_init)
+        .post_shutdown(post_shutdown)
+        .build()
+    )
+    app.bot_data["deps"] = deps or make_deps(settings, access, tick_enabled)
     only_admins = admin_filter(access)
     app.add_handler(CommandHandler("ping", ping, filters=only_admins))
     app.add_handler(CommandHandler("help", help_command, filters=only_admins))
+    app.add_handler(CommandHandler("week", h.week_command, filters=only_admins))
+    app.add_handler(CommandHandler("slots", h.slots_command, filters=only_admins))
+    app.add_handler(CommandHandler("post", h.post_command, filters=only_admins))
+    app.add_handler(CommandHandler("cancel", h.cancel_command, filters=only_admins))
+    app.add_handler(CommandHandler(["pause", "resume"], h.pause_command, filters=only_admins))
+    app.add_handler(MessageHandler(only_admins & filters.PHOTO, h.on_photo))
+    app.add_handler(MessageHandler(only_admins & filters.TEXT & ~filters.COMMAND, h.on_text))
+    app.add_handler(CallbackQueryHandler(h.on_button, pattern=r"^a:"))
     return app

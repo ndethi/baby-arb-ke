@@ -1,0 +1,18 @@
+# The content calendar (docs/marketing/ENGINE_SPEC.md section 4).
+# This file is the calendar: no slot times are hard-coded anywhere else.
+# Times are Nairobi local. 12:30 and 19:00 are starting guesses, reviewed
+# after two weeks of Insights data (Phase 6).
+timezone: Africa/Nairobi
+channels: [instagram, facebook, tiktok]
+slots:
+  drop:     {days: [thu], time: "19:00", max: 6}        # own picks (P-codes)
+  listing:  {days: [tue, fri], time: "12:30", max: 4}   # seller listings (L-codes)
+  teaser:   {days: [mon], time: "19:00", max: 1}
+  tip:      {days: [wed], time: "19:00", max: 1}
+  behind:   {days: [sat], time: "12:30", max: 1}
+blackout_days: [sun]
+min_gap_minutes: 90          # between two feed posts on the same channel
+lookahead_days: 14
+specials:                    # one-off dated slots that override the weekly rhythm
+  - {date: 2026-11-27, kind: listing, time: "12:30", label: "Black Friday roundup"}
+  - {date: 2026-12-03, kind: drop,    time: "19:00", label: "Drop 3, gift edition"}

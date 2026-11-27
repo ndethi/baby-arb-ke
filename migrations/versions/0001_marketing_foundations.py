@@ -1,7 +1,7 @@
 """Marketing foundations: listing store, safety verdicts, llm_calls, bot state.
 
-ENGINE_SPEC section 7, Phase 0 tables. Phase 1 adds renders, edit_events,
-schedule and notices in 0002.
+ENGINE_SPEC section 7, Phase 0 tables. Phase 1 adds renders, edit_events
+and schedule in 0002.
 
 Revision ID: 0001
 Revises:
