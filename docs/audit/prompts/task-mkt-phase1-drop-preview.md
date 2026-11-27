@@ -76,3 +76,36 @@ entry (asked first), group privacy setting for albums (operator, see PR).
 - Brand guide tooling: parked as asked.
 
 **Outcome:** agent installed and running; script committed.
+
+## 2026-11-27 · Claude Code (claude-opus-5-5) · first live drop
+
+**Prompt** (verbatim):
+> done the drop , check it went through and consider some feed back,
+>
+> 1. photo add with caption works great, but would be even better if we could use a vision engine
+> to read whats on the photo and augment the caption with scraped details - can do this in two
+> phases if branding/model details available in the photo we could use that otherwise read the
+> photo and look up online for more metadata
+> 2. the preview album doesnt come up after the safety check- we could skip the safety check step
+> entirely for this version,
+> 3. lets mark these as tests so far not real items out to be sold already
+
+**Decisions:**
+- Root cause of 2: no button press ever reached the bot. Telegram keeps the last
+  `allowed_updates` filter; my earlier messages-only getUpdates (reading the IDs) set it, and
+  `run_polling()` without the argument kept it. Now `allowed_updates=Update.ALL_TYPES`, with a
+  test; getWebhookInfo confirms `callback_query` is delivered.
+- 2 itself: did not drop the screen. BLOCK (never-sell list) is a hard rule in AGENTS.md and
+  the spec, so it still stops the flow. The separate override step is gone instead: REVIEW
+  renders straight to the preview with the reasons as a warning, the button reads "Approve
+  (checked)", and the approve is recorded as `override_by` on the verdict.
+- 3: `listings.is_test` (migration 0003), a `#test` caption tag, `mkt test` / `test P-0001`.
+  P-0001 and P-0002 are flagged and closed (REJECTED with note "test drop"; not drift).
+- Migration 0003 first failed on the live database: batch mode rebuilds `listings` and SQLite
+  refused to drop it while photos and events reference it. It rolled back except a leftover
+  `_alembic_tmp_listings`; restored the pre-0003 backup (taken right before) and fixed
+  `migrations/env.py` to switch foreign keys off for the run and run `foreign_key_check` after.
+  Regression test added (fails without the fix).
+- 1 (vision + online lookup) is spec Phase 2 "Identify"; proposed, not built here.
+
+**Outcome:** bot restarted under launchd with the fixes; both drops are test-flagged.
