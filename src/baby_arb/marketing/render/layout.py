@@ -1,6 +1,7 @@
 """Per-listing render state that edit operations change (stored in listings.layout).
 
-Elements: price, code, condition, cta, anchor, seller_tag. Sizes are steps
+Elements: price, code, condition, cta, anchor, seller_tag, details (the strip
+of short looked-up facts). Sizes are steps
 (-2..+3) around each element's base size; positions are corners; toggles
 switch optional elements. `code`, `price` and `seller_tag` cannot be
 toggled off because the creative checks require them.
@@ -12,8 +13,9 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-Element = Literal["price", "code", "condition", "cta", "anchor", "seller_tag"]
-ELEMENTS: tuple[Element, ...] = ("price", "code", "condition", "cta", "anchor", "seller_tag")
+Element = Literal["price", "code", "condition", "cta", "anchor", "seller_tag", "details"]
+ELEMENTS: tuple[Element, ...] = ("price", "code", "condition", "cta", "anchor", "seller_tag",
+                                 "details")
 Position = Literal["top-left", "top-right", "bottom-left", "bottom-right"]
 POSITIONS: tuple[Position, ...] = ("top-left", "top-right", "bottom-left", "bottom-right")
 Focus = Literal["center", "top", "bottom", "left", "right"]
@@ -21,11 +23,11 @@ FOCI: tuple[Focus, ...] = ("center", "top", "bottom", "left", "right")
 Template = Literal["classic", "bold"]
 TEMPLATES: tuple[Template, ...] = ("classic", "bold")
 
-TOGGLEABLE: frozenset[str] = frozenset({"condition", "cta", "anchor"})
+TOGGLEABLE: frozenset[str] = frozenset({"condition", "cta", "anchor", "details"})
 MOVABLE: frozenset[str] = frozenset({"price", "code", "condition"})
 MIN_STEP, MAX_STEP = -2, 3
 
-TEMPLATE_VERSION = 1
+TEMPLATE_VERSION = 2  # 2: details strip
 
 DEFAULT_POSITIONS: dict[str, Position] = {
     "price": "bottom-left", "code": "top-right", "condition": "top-left",

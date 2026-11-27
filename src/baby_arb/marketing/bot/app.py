@@ -24,6 +24,7 @@ from baby_arb.marketing.bot.cards import HELP
 from baby_arb.marketing.bot.send import OpsSender
 from baby_arb.marketing.calendar import load_config
 from baby_arb.marketing.llm import complete
+from baby_arb.marketing.lookup import make_lookup
 from baby_arb.marketing.render.static import render_listing
 from baby_arb.storage.db import get_engine
 
@@ -54,8 +55,9 @@ def admin_filter(access: Access) -> filters.BaseFilter:
 def make_deps(settings: Settings, access: Access, tick_enabled: bool = True) -> h.BotDeps:
     """Real dependencies from settings."""
     token = settings.telegram_bot_token or ""
+    engine = get_engine(settings.database_url)
     return h.BotDeps(
-        engine=get_engine(settings.database_url),
+        engine=engine,
         load_cfg=load_config,
         assets_dir=Path(settings.marketing_assets_dir),
         access=access,
@@ -63,6 +65,7 @@ def make_deps(settings: Settings, access: Access, tick_enabled: bool = True) -> 
         renderer=partial(render_listing, channel=settings.render_browser_channel),
         completer=complete,
         notifier_factory=lambda: OpsSender(token, access),
+        lookup=make_lookup(settings.brave_search_api_key, engine, settings.brave_daily_call_cap),
         tick_enabled=tick_enabled,
     )
 
@@ -96,6 +99,10 @@ def build_application(
     app = (
         Application.builder()
         .token(settings.telegram_bot_token)
+        # Preview albums are several images; the 5-20 s defaults timed out.
+        .read_timeout(60)
+        .write_timeout(60)
+        .media_write_timeout(120)
         .post_init(post_init)
         .post_shutdown(post_shutdown)
         .build()
@@ -112,4 +119,5 @@ def build_application(
     app.add_handler(MessageHandler(only_admins & filters.PHOTO, h.on_photo))
     app.add_handler(MessageHandler(only_admins & filters.TEXT & ~filters.COMMAND, h.on_text))
     app.add_handler(CallbackQueryHandler(h.on_button, pattern=r"^a:"))
+    app.add_error_handler(h.on_error)
     return app

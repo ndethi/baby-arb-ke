@@ -20,6 +20,7 @@ from baby_arb.posting.tables import (
     ScheduleRow,
     as_utc,
 )
+from PIL import Image
 from sqlmodel import Session, select
 
 NBO = ZoneInfo("Africa/Nairobi")
@@ -43,8 +44,9 @@ def fake_renderer(view, photos, layout, out_dir: Path) -> RenderResult:
     result = RenderResult()
     for name in ("feed", "story", "tiktok_1"):
         path = out_dir / f"{name}.png"
-        path.write_text(json.dumps({"code": view.code, "price": view.price,
-                                    "hero": layout.photo_order[0]}))
+        Image.new("RGB", (27, 34), (200, 180, 160)).save(path)
+        path.with_suffix(".json").write_text(json.dumps(
+            {"code": view.code, "price": view.price, "hero": layout.photo_order[0]}))
         result.paths[name] = path
         result.issues[name] = []
     return result
@@ -146,7 +148,7 @@ def test_edit_round_logs_drift(ctx):
     assert step.echo == ["make price badge larger", "remove 'washed' from captions",
                          "set photo 3 as hero"]
     assert "washed" not in step.caption_ig.lower()
-    hero = json.loads(step.assets[0].read_text())["hero"]
+    hero = json.loads(step.assets[0].with_suffix(".json").read_text())["hero"]
     assert hero == 3
     events = ctx.session.exec(select(EditEvent)).all()
     assert [e.op for e in events] == ["resize", "rewrite_caption", "swap_photo"]

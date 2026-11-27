@@ -23,12 +23,15 @@ import structlog
 from sqlalchemy.engine import Engine
 from sqlmodel import Session
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, Update
+from telegram.error import NetworkError
 from telegram.ext import Application, ContextTypes
 
 from baby_arb.marketing import pipeline as pl
 from baby_arb.marketing.bot.auth import Access
 from baby_arb.marketing.bot.cards import HELP, Album, Out, Text, step_messages
+from baby_arb.marketing.bot.send import telegram_copy
 from baby_arb.marketing.calendar import CONTENT_KINDS, CalendarConfig, format_week, week_view
+from baby_arb.marketing.lookup import LookupResult
 from baby_arb.marketing.render.static import RenderError
 from baby_arb.marketing.tick import Notifier, tick
 from baby_arb.posting.store import get_flag, set_flag
@@ -42,7 +45,7 @@ ALBUM_WAIT_SECONDS = 2.0
 TICK_SECONDS = 300
 CODE = r"([PLC]-\d{4})"
 _MOVE = re.compile(rf"^move\s+{CODE}\s+(.+)$", re.IGNORECASE)
-_SIMPLE = re.compile(rf"^(skip|posted|test)\s+{CODE}$", re.IGNORECASE)
+_SIMPLE = re.compile(rf"^(skip|posted|test|show)\s+{CODE}$", re.IGNORECASE)
 _SIMPLE_STEPS: dict[str, Callable[[pl.Context, str], str]] = {
     "skip": pl.skip, "posted": pl.posted, "test": pl.mark_test,
 }
@@ -59,6 +62,7 @@ class BotDeps:
     ops_chat_id: int | None
     renderer: pl.Renderer
     completer: pl.Completer
+    lookup: Callable[[str, str | None], LookupResult] | None = None
     notifier_factory: Callable[[], Notifier] | None = None
     tick_enabled: bool = True
 
@@ -98,7 +102,7 @@ def _in_session(deps: BotDeps, actor: str, fn: Callable[[pl.Context], T]) -> T:
     with Session(deps.engine) as session:
         ctx = pl.Context(session=session, cfg=deps.load_cfg(), assets_dir=deps.assets_dir,
                          actor=actor, now=utcnow(), renderer=deps.renderer,
-                         completer=deps.completer)
+                         completer=deps.completer, lookup=deps.lookup)
         return fn(ctx)
 
 
@@ -113,17 +117,30 @@ async def run_flow(deps: BotDeps, actor: str, fn: Callable[[pl.Context], T]) -> 
         return Text(f"⚠️ Rendering failed: {exc}")
 
 
+async def _send_album(context: ContextTypes.DEFAULT_TYPE, chat_id: int, album: Album) -> None:
+    paths = await asyncio.to_thread(lambda: [telegram_copy(p) for p in album.paths])
+    if len(paths) == 1:
+        await context.bot.send_photo(chat_id, paths[0].read_bytes(), caption=album.caption)
+        return
+    media = [InputMediaPhoto(p.read_bytes(), caption=album.caption if i == 0 else None)
+             for i, p in enumerate(paths)]
+    await context.bot.send_media_group(chat_id, media)
+
+
 async def send_outs(context: ContextTypes.DEFAULT_TYPE, chat_id: int, outs: list[Out]) -> None:
-    """Send pipeline output to the chat the admin wrote from."""
+    """Send pipeline output to the chat the admin wrote from.
+
+    A failed image upload never swallows the captions and buttons after it.
+    """
     for out in outs:
         if isinstance(out, Album):
-            if len(out.paths) == 1:
-                await context.bot.send_photo(chat_id, out.paths[0].read_bytes(),
-                                             caption=out.caption)
-                continue
-            media = [InputMediaPhoto(p.read_bytes(), caption=out.caption if i == 0 else None)
-                     for i, p in enumerate(out.paths)]
-            await context.bot.send_media_group(chat_id, media)
+            try:
+                await _send_album(context, chat_id, out)
+            except (NetworkError, OSError) as exc:
+                logger.error("album send failed", error=str(exc))
+                await context.bot.send_message(
+                    chat_id, "⚠️ Couldn't send the images (" + type(exc).__name__ + "). The "
+                    "buttons below still work; 'show <code>' tries the images again.")
         else:
             markup = None
             if out.buttons:
@@ -225,8 +242,11 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     if m := _SIMPLE.match(text):
         verb, code = m.group(1).lower(), m.group(2).upper()
-        fn = _SIMPLE_STEPS[verb]
-        result = await run_flow(deps, actor, lambda ctx: fn(ctx, code))
+        if verb == "show":
+            result = await run_flow(deps, actor, lambda ctx: pl.show(ctx, code))
+        else:
+            fn = _SIMPLE_STEPS[verb]
+            result = await run_flow(deps, actor, lambda ctx: fn(ctx, code))
         await _respond(context, deps, chat_id, user.id, result)
         return
 
@@ -299,6 +319,8 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         result = await run_flow(deps, actor, lambda ctx: pl.override(ctx, code))
     elif action == "posted":
         result = await run_flow(deps, actor, lambda ctx: pl.posted(ctx, code))
+    elif action == "useref":
+        result = await run_flow(deps, actor, lambda ctx: pl.use_price_ref(ctx, code))
     elif action == "reslot":
         result = await run_flow(deps, actor, lambda ctx: pl.reslot(ctx, code))
     else:
@@ -396,6 +418,11 @@ async def run_tick(deps: BotDeps) -> list[str]:
     except Exception as exc:  # a failed tick must not stop the bot
         logger.error("tick failed", error=str(exc))
         return []
+
+
+async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Log handler errors in one line instead of a bare traceback."""
+    logger.error("handler error", error=repr(context.error)[:300])
 
 
 async def tick_loop(app: Application) -> None:  # type: ignore[type-arg]

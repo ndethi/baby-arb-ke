@@ -92,6 +92,7 @@ class Listing(SQLModel, table=True):
     round: int = 0  # render round shown in the latest preview
     created_by: str | None = None  # admin Telegram ID or "cli"
     is_test: bool = False  # test drops: never real stock, left out of reports
+    details: str | None = None  # JSON: model guess, looked-up facts and KE price ref
     created_at: datetime = Field(default_factory=utcnow)
     live_at: datetime | None = None
     sold_at: datetime | None = None

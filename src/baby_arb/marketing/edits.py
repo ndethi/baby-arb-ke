@@ -68,6 +68,7 @@ class EditPlan:
 # --------------------------------------------------------------------------- rules
 
 _ELEMENT_WORDS: list[tuple[str, str]] = [
+    (r"details?|specs?|spec strip|info strip|chips?|stickers?", "details"),
     (r"seller tag|seller label", "seller_tag"),
     (r"call to action|cta|dm (?:strip|bar|line)|bottom (?:bar|strip)|buy (?:strip|bar)", "cta"),
     (r"new(?:-| in nairobi)? ?(?:price )?anchor|anchor|new in nairobi|reference price|ref price",
@@ -231,9 +232,9 @@ into operations. Allowed operations only (JSON list):
 {"op":"set_field","target":<price|grade|age_range|condition_note|title|ref_new_price|buy_price>,"value":...}
 {"op":"swap_photo","target":"<slot number, 1 = hero>","value":<photo number>}
 {"op":"reorder_photos","value":[photo numbers]}
-{"op":"resize","target":<price|code|condition|cta|anchor|seller_tag>,"value":"up"|"down"}
+{"op":"resize","target":<price|code|condition|cta|anchor|seller_tag|details>,"value":"up"|"down"}
 {"op":"move","target":<price|code|condition>,"value":<top-left|top-right|bottom-left|bottom-right>}
-{"op":"toggle","target":<condition|cta|anchor>,"value":"on"|"off"}
+{"op":"toggle","target":<condition|cta|anchor|details>,"value":"on"|"off"}
 {"op":"set_template","value":"classic"|"bold"}
 {"op":"rewrite_caption","target":"ig"|"tiktok"|"all","value":"<instruction>"}
 {"op":"crop","target":"<photo number>","value":<center|top|bottom|left|right>}
@@ -353,7 +354,8 @@ def validate_op(op: EditOp, raw_text: str, state: dict[str, Any]) -> list[str]:
 
 # --------------------------------------------------------------------------- describe
 
-_ELEMENT_LABEL = {"price": "price badge", "code": "code", "condition": "condition badge",
+_ELEMENT_LABEL = {"details": "details strip",
+                  "price": "price badge", "code": "code", "condition": "condition badge",
                   "cta": "DM strip", "anchor": "'new in Nairobi' line", "seller_tag": "seller tag"}
 
 
