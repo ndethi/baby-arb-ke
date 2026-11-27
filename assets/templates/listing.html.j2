@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- babyReShop KE listing graphic, template version {{ template_version }}.
+     Brand fonts are not in assets/fonts/ yet (spec section 12), so a system
+     stack is used. Elements carry data-el so checks.py can measure them. -->
+<style>
+  :root {
+    --ink: #1f2a37;
+    --paper: #fffaf3;
+    --accent: {{ '#e4572e' if template == 'bold' else '#2f7d6d' }};
+    --accent-ink: #ffffff;
+    --soft: rgba(255, 250, 243, 0.92);
+    --font: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: {{ width }}px; height: {{ height }}px; overflow: hidden; }
+  body { background: var(--paper); font-family: var(--font); color: var(--ink); position: relative; }
+  .photo { position: absolute; left: 0; top: 0; width: {{ width }}px; height: {{ photo_height }}px; overflow: hidden; background: #e9e4dc; }
+  .photo img { width: 100%; height: 100%; object-fit: cover; object-position: {{ focus }}; display: block; }
+  .safe { position: absolute; left: {{ margin_x }}px; right: {{ margin_x }}px; top: {{ safe_top }}px; bottom: {{ safe_bottom }}px; }
+  .badge { position: absolute; padding: 0.28em 0.55em; border-radius: 0.4em; font-weight: 800; line-height: 1.05; white-space: nowrap; }
+  .top-left { left: 0; top: 0; }
+  .top-right { right: 0; top: 0; }
+  .bottom-left { left: 0; bottom: 0; }
+  .bottom-right { right: 0; bottom: 0; }
+  .price { background: var(--accent); color: var(--accent-ink); font-size: {{ px.price }}px; }
+  .code { background: var(--soft); color: var(--ink); font-size: {{ px.code }}px; letter-spacing: 0.04em; }
+  .condition { background: var(--soft); color: var(--ink); font-size: {{ px.condition }}px; font-weight: 700; }
+  .anchor { background: var(--soft); color: var(--ink); font-size: {{ px.anchor }}px; font-weight: 600; padding: 0.3em 0.6em; border-radius: 0.4em; }
+  .seller-tag { position: absolute; left: 0; top: {{ seller_tag_top }}px; background: var(--ink); color: var(--paper); font-size: {{ px.seller_tag }}px; font-weight: 700; padding: 0.3em 0.6em; border-radius: 0.4em; }
+  .cta { position: absolute; left: 0; right: 0; bottom: {{ cta_bottom }}px; height: {{ cta_height }}px; background: var(--ink); color: var(--paper); display: flex; align-items: center; justify-content: center; font-size: {{ px.cta }}px; font-weight: 800; letter-spacing: 0.02em; }
+</style>
+</head>
+<body>
+  <div class="photo" data-el="photo"><img src="{{ hero_src }}" alt=""></div>
+  <div class="safe">
+    {% if show.condition and condition_text %}
+    <div class="badge condition {{ pos.condition }}" data-el="condition">{{ condition_text }}</div>
+    {% endif %}
+    <div class="badge code {{ pos.code }}" data-el="code">{{ code }}</div>
+    {% if seller %}
+    <div class="seller-tag" data-el="seller_tag">Seller listing</div>
+    {% endif %}
+    {% if price_text %}
+    <div class="badge price {{ pos.price }}" data-el="price">{{ price_text }}</div>
+    {% endif %}
+    {% if show.anchor and anchor_text %}
+    <div class="anchor" data-el="anchor" style="position:absolute; {{ anchor_style }}">{{ anchor_text }}</div>
+    {% endif %}
+  </div>
+  {% if show.cta and cta_text %}
+  <div class="cta" data-el="cta">{{ cta_text }}</div>
+  {% endif %}
+</body>
+</html>

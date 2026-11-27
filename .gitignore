@@ -71,3 +71,7 @@ logs/
 
 # Gate run scratch output (the committed record lives in docs/audit/)
 .gate/
+
+# Marketing engine: admin photos and rendered assets stay local
+assets/raw/
+assets/ready/
