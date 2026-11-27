@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -196,3 +197,26 @@ def test_application_wires_phase1_handlers():
     commands = {c for hd in app.handlers[0] for c in getattr(hd, "commands", ())}
     assert {"ping", "help", "week", "slots", "post", "cancel", "pause", "resume"} <= commands
     assert app.bot_data["deps"].tick_enabled is False
+
+
+async def test_tick_loop_starts_and_stops_with_the_app(deps, monkeypatch):
+    from baby_arb.config import Settings
+    from baby_arb.marketing.bot.app import build_application
+
+    calls: list[int] = []
+
+    async def fake_loop(app):
+        calls.append(1)
+        await asyncio.sleep(3600)
+
+    monkeypatch.setattr(h, "tick_loop", fake_loop)
+    deps.tick_enabled = True
+    settings = Settings(telegram_bot_token="123:t", telegram_admin_ids=str(ADMIN),
+                        _env_file=None)
+    app = build_application(settings, deps=deps)
+    await app.post_init(app)
+    await asyncio.sleep(0)
+    task = app.bot_data["tick_task"]
+    assert calls == [1] and not task.done()
+    await app.post_shutdown(app)
+    assert task.cancelled()

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from functools import partial
 from pathlib import Path
 
@@ -80,11 +82,23 @@ def build_application(
         raise BotNotConfiguredError("TELEGRAM_ADMIN_IDS is empty; the bot would answer nobody")
 
     async def post_init(app: Application) -> None:  # type: ignore[type-arg]
+        # The app is not "running" yet here, so own the task and cancel it on shutdown.
         if app.bot_data["deps"].tick_enabled:
-            app.create_task(h.tick_loop(app))
+            app.bot_data["tick_task"] = asyncio.get_running_loop().create_task(h.tick_loop(app))
+
+    async def post_shutdown(app: Application) -> None:  # type: ignore[type-arg]
+        task = app.bot_data.get("tick_task")
+        if task is not None:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
 
     app = (
-        Application.builder().token(settings.telegram_bot_token).post_init(post_init).build()
+        Application.builder()
+        .token(settings.telegram_bot_token)
+        .post_init(post_init)
+        .post_shutdown(post_shutdown)
+        .build()
     )
     app.bot_data["deps"] = deps or make_deps(settings, access, tick_enabled)
     only_admins = admin_filter(access)
