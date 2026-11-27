@@ -53,3 +53,26 @@
 
 **Outcome:** see commits on this branch. Not done: brand fonts/logo (operator), Hermes cron
 entry (asked first), group privacy setting for albums (operator, see PR).
+
+## 2026-11-27 · Claude Code (claude-opus-5-5) · launchd
+
+**Prompt** (verbatim):
+> privacy disabled, try a drop in the group now and lets also launch a launchd job so we can keep
+> this alive
+>
+> in terms of the brand fonts - lets think through what tools we could use through this pipeline
+> to bootstrap a brand guide but park that for later
+
+**Decisions:**
+- getMe confirms `can_read_all_group_messages: true`. A bot can't send itself a drop (Telegram
+  doesn't deliver a bot's own messages to it), so the group test needs an admin to post the album.
+- `scripts/install_bot_launchd.sh` writes `~/Library/LaunchAgents/ke.babyreshop.bot.plist`
+  running `baby-arb bot run` from this working copy (logs in `~/Library/Logs/babyreshop/`).
+  KeepAlive restarts on crash (checked with kill -9) and leaves a clean stop stopped.
+  `ProcessType=Interactive`: with default throttled I/O the first start took ~2 min in OpenSSL
+  certificate loading. The script waits for bootout to finish; bootstrap otherwise fails with
+  error 5.
+- The agent runs whatever branch is checked out here, like the Hermes cron jobs.
+- Brand guide tooling: parked as asked.
+
+**Outcome:** agent installed and running; script committed.
