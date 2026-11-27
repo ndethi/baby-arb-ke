@@ -11,14 +11,53 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Any
 
-from sqlalchemy import Column, Numeric, UniqueConstraint
+from sqlalchemy import Column, DateTime, Numeric, UniqueConstraint
+from sqlalchemy.engine import Dialect
+from sqlalchemy.types import TypeDecorator
 from sqlmodel import Field, SQLModel
 
 
 def utcnow() -> datetime:
     """Timezone-aware current UTC time (column default)."""
     return datetime.now(UTC)
+
+
+class UTCDateTime(TypeDecorator[datetime]):
+    """DateTime stored as naive UTC and read back aware (SQLite drops tzinfo).
+
+    Aware values in any zone are converted to UTC before they are written or
+    compared, so a Nairobi time and its UTC equivalent match in queries.
+    """
+
+    impl = DateTime
+    cache_ok = True
+
+    def process_bind_param(self, value: Any, dialect: Dialect) -> datetime | None:
+        """Convert to naive UTC."""
+        if value is None:
+            return None
+        if not isinstance(value, datetime):
+            raise TypeError(f"expected datetime, got {type(value).__name__}")
+        moment: datetime = value
+        if moment.tzinfo is not None:
+            moment = moment.astimezone(UTC)
+        return moment.replace(tzinfo=None)
+
+    def process_result_value(self, value: Any, dialect: Dialect) -> datetime | None:
+        """Attach UTC."""
+        if value is None:
+            return None
+        if not isinstance(value, datetime):
+            raise TypeError(f"expected datetime, got {type(value).__name__}")
+        moment: datetime = value
+        return moment.replace(tzinfo=UTC)
+
+
+def as_utc(value: datetime) -> datetime:
+    """Read a stored time back as aware UTC (SQLite drops tzinfo)."""
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
 class Listing(SQLModel, table=True):
@@ -46,6 +85,12 @@ class Listing(SQLModel, table=True):
     ref_new_price: int | None = None
     seller_id: int | None = None  # FK added with the sellers table (Phase 3)
     template_version: int | None = None
+    # Phase 1: render state and current captions (the latest round wins).
+    layout: str | None = None  # JSON, see marketing/render/layout.py
+    caption_ig: str | None = None
+    caption_tiktok: str | None = None
+    round: int = 0  # render round shown in the latest preview
+    created_by: str | None = None  # admin Telegram ID or "cli"
     created_at: datetime = Field(default_factory=utcnow)
     live_at: datetime | None = None
     sold_at: datetime | None = None
@@ -129,3 +174,56 @@ class BotState(SQLModel, table=True):
     key: str = Field(primary_key=True)
     value: str
     updated_at: datetime = Field(default_factory=utcnow)
+
+
+class ScheduleRow(SQLModel, table=True):
+    """A calendar slot for a listing or content post (ENGINE_SPEC section 4).
+
+    Status: PROPOSED -> QUEUED -> POSTED; QUEUED -> MISSED -> QUEUED | SKIPPED;
+    PROPOSED | QUEUED -> SKIPPED.
+    """
+
+    __tablename__ = "schedule"
+
+    id: int | None = Field(default=None, primary_key=True)
+    listing_code: str = Field(foreign_key="listings.code", index=True)
+    kind: str = Field(max_length=16)  # drop | listing | teaser | tip | behind
+    slot_at: datetime = Field(sa_type=UTCDateTime, index=True)
+    channels: str  # comma-separated, e.g. "instagram,facebook,tiktok"
+    status: str = Field(max_length=10, index=True)
+    proposed_by: str = Field(max_length=8)  # system | admin
+    moved_from: datetime | None = Field(default=None, sa_type=UTCDateTime)
+    reminded_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
+    posted_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
+    created_at: datetime = Field(default_factory=utcnow, sa_type=UTCDateTime)
+
+
+class Render(SQLModel, table=True):
+    """One rendered asset for one round of a listing's preview."""
+
+    __tablename__ = "renders"
+
+    id: int | None = Field(default=None, primary_key=True)
+    listing_code: str = Field(foreign_key="listings.code", index=True)
+    round: int
+    asset: str  # feed | story | tiktok_<n> | reel | sold
+    path: str
+    template_version: int
+    at: datetime = Field(default_factory=utcnow)
+
+
+class EditEvent(SQLModel, table=True):
+    """The drift log: one row per applied edit operation (or reject)."""
+
+    __tablename__ = "edit_events"
+
+    id: int | None = Field(default=None, primary_key=True)
+    listing_code: str = Field(foreign_key="listings.code", index=True)
+    round: int
+    raw_text: str
+    op: str
+    target: str | None = None
+    before: str | None = None
+    after: str | None = None
+    parsed_by: str = Field(max_length=8)  # rules | model | admin
+    at: datetime = Field(default_factory=utcnow)
