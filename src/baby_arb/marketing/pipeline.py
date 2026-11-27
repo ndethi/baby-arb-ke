@@ -543,6 +543,26 @@ def render_round(ctx: Context, listing: Listing, echo: list[str] | None = None,
     slot_line, _ = _propose_slot(ctx, listing)
     move_listing(ctx.session, listing, "PREVIEW", "system", f"round {listing.round}")
     ctx.session.commit()
+    return _preview(ctx, listing, list(result.paths.values()), slot_line,
+                    result.all_issues + (extra_issues or []), echo or [])
+
+
+def show(ctx: Context, code: str) -> Preview:
+    """Rebuild the latest preview without re-rendering (e.g. after a failed send).
+
+    Raises:
+        FlowError: the listing is not in preview.
+    """
+    listing = get_listing(ctx.session, code)
+    if listing.status not in {"PREVIEW", "EDITING"}:
+        raise FlowError(f"{listing.code} is {listing.status}; there is no preview to show.")
+    slot_line, _ = _propose_slot(ctx, listing)
+    ctx.session.commit()
+    return _preview(ctx, listing, latest_assets(ctx.session, listing.code), slot_line, [], [])
+
+
+def _preview(ctx: Context, listing: Listing, assets: list[Path], slot_line: str,
+             issues: list[str], echo: list[str]) -> Preview:
     warnings = price_warnings(listing.price, listing.buy_price)
     verdict = latest_verdict(ctx.session, listing.code)
     pending = review_reasons(verdict)
@@ -554,13 +574,13 @@ def render_round(ctx: Context, listing: Listing, echo: list[str] | None = None,
     return Preview(
         code=listing.code,
         round=listing.round,
-        assets=list(result.paths.values()),
+        assets=assets,
         caption_ig=listing.caption_ig or "",
         caption_tiktok=listing.caption_tiktok or "",
         slot_line=slot_line,
         warnings=warnings,
-        issues=result.all_issues + (extra_issues or []),
-        echo=echo or [],
+        issues=issues,
+        echo=echo,
         needs_check=bool(pending),
         is_test=listing.is_test,
         info=_info_lines(listing),

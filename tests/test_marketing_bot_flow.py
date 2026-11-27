@@ -246,3 +246,48 @@ def test_bot_run_asks_telegram_for_button_presses(monkeypatch):
     assert result.exit_code == 0
     assert seen["allowed_updates"] == Update.ALL_TYPES
     assert "callback_query" in seen["allowed_updates"]
+
+
+async def test_failed_album_still_sends_card_and_show_resends(deps, monkeypatch):
+    from telegram.error import TimedOut
+
+    ctx = _context(deps)
+
+    async def boom(chat_id, media):
+        raise TimedOut("upload too slow")
+
+    ctx.bot.send_media_group = boom
+    await _album(ctx)
+    await h.on_text(_msg("Graco Modes stroller"), ctx)
+    texts = [m[1] for m in ctx.bot.messages]
+    assert any(t.startswith("⚠️ Couldn't send the images (TimedOut)") for t in texts)
+    assert texts[-1].startswith("P-0001 · preview round 1")  # card and buttons still sent
+
+    sent = []
+
+    async def ok(chat_id, media):
+        sent.append(len(media))
+
+    ctx.bot.send_media_group = ok
+    await h.on_text(_msg("show P-0001"), ctx)
+    assert sent == [3] and ctx.bot.messages[-1][1].startswith("P-0001 · preview round 1")
+    with Session(deps.engine) as s:
+        assert s.get(Listing, "P-0001").round == 1  # shown again, not re-rendered
+
+
+def test_telegram_copy_is_a_smaller_jpeg(tmp_path):
+    import random
+
+    from baby_arb.marketing.bot.send import telegram_copy
+    from PIL import Image
+
+    png = tmp_path / "feed_4x5.png"
+    rnd = random.Random(1)
+    img = Image.new("RGB", (1080, 1350))
+    img.putdata([(rnd.randrange(256), rnd.randrange(256), rnd.randrange(256))
+                 for _ in range(1080 * 1350)])
+    img.save(png)
+    jpg = telegram_copy(png)
+    assert jpg.name == "feed_4x5.tg.jpg" and Image.open(jpg).format == "JPEG"
+    assert jpg.stat().st_size < png.stat().st_size
+    assert telegram_copy(jpg) == jpg

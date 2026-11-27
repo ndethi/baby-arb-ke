@@ -169,11 +169,14 @@ def test_album_sender_posts_multipart(tmp_path):
     route = respx.post(f"{API_BASE}/bot123:t/sendMediaGroup").mock(
         return_value=httpx.Response(200, json={"ok": True, "result": [{"message_id": 1}]}))
     sender = OpsSender("123:t", Access(frozenset({1}), frozenset({OPS})))
+    from PIL import Image
+
     imgs = []
     for i in range(2):
         p = tmp_path / f"{i}.png"
-        p.write_bytes(b"png")
+        Image.new("RGB", (1080, 1350), (i * 80, 120, 160)).save(p)
         imgs.append(p)
     assert sender.send_media_group(OPS, imgs, caption="P-0001") == [{"message_id": 1}]
     body = route.calls[0].request.content
     assert b"attach://f0" in body and b"attach://f1" in body and b"P-0001" in body
+    assert b"image/jpeg" in body and b"0.tg.jpg" in body

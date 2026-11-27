@@ -20,6 +20,25 @@ from baby_arb.marketing.bot.auth import Access
 
 API_BASE = "https://api.telegram.org"
 MAX_ALBUM = 10
+MEDIA_TIMEOUT = 120.0
+JPEG_QUALITY = 88
+
+
+def telegram_copy(path: Path) -> Path:
+    """A JPEG copy of a rendered PNG for Telegram (made once, kept beside it).
+
+    A preview round is several 1-2 MB PNGs; uploading them as one album timed out.
+    Telegram recompresses photos anyway, and the PNG stays the file to post.
+    """
+    if path.suffix.lower() in {".jpg", ".jpeg"}:
+        return path
+    out = path.with_name(path.stem + ".tg.jpg")
+    if not out.exists() or out.stat().st_mtime < path.stat().st_mtime:
+        from PIL import Image
+
+        with Image.open(path) as im:
+            im.convert("RGB").save(out, "JPEG", quality=JPEG_QUALITY, optimize=True)
+    return out
 
 
 class DestinationNotAllowedError(RuntimeError):
@@ -72,9 +91,10 @@ class OpsSender:
         media: list[dict[str, Any]] = []
         with ExitStack() as stack:
             files: dict[str, Any] = {}
-            for i, path in enumerate(paths):
+            for i, original in enumerate(paths):
+                path = telegram_copy(original)
                 key = f"f{i}"
-                files[key] = (path.name, stack.enter_context(path.open("rb")), "image/png")
+                files[key] = (path.name, stack.enter_context(path.open("rb")), "image/jpeg")
                 item: dict[str, Any] = {"type": "photo", "media": f"attach://{key}"}
                 if i == 0 and caption:
                     item["caption"] = caption[:1024]
@@ -83,6 +103,7 @@ class OpsSender:
                 f"{API_BASE}/bot{self._token}/sendMediaGroup",
                 data={"chat_id": str(chat_id), "media": json.dumps(media)},
                 files=files,
+                timeout=MEDIA_TIMEOUT,
             )
         resp.raise_for_status()
         result: list[dict[str, Any]] = resp.json()["result"]

@@ -32,3 +32,8 @@
 - Brave calls capped per Nairobi day (`BRAVE_DAILY_CALL_CAP`, default 50).
 
 **Outcome:** see commits on this branch. Brave lookup untested live until the key is in `.env`.
+- Found in the bot log: the third test drop (P-0003) rendered, but sending six 1-2 MB PNGs as
+  one album timed out and the exception also swallowed the captions and buttons. Fixes (a
+  Phase 1 bug, fixed here because the live bot runs this branch): JPEG copies for Telegram
+  (PNGs stay the files to post), longer media timeouts, an album failure no longer stops the
+  card, a `show P-0003` command re-sends the latest preview, and an error handler logs one line.

@@ -99,6 +99,10 @@ def build_application(
     app = (
         Application.builder()
         .token(settings.telegram_bot_token)
+        # Preview albums are several images; the 5-20 s defaults timed out.
+        .read_timeout(60)
+        .write_timeout(60)
+        .media_write_timeout(120)
         .post_init(post_init)
         .post_shutdown(post_shutdown)
         .build()
@@ -115,4 +119,5 @@ def build_application(
     app.add_handler(MessageHandler(only_admins & filters.PHOTO, h.on_photo))
     app.add_handler(MessageHandler(only_admins & filters.TEXT & ~filters.COMMAND, h.on_text))
     app.add_handler(CallbackQueryHandler(h.on_button, pattern=r"^a:"))
+    app.add_error_handler(h.on_error)
     return app

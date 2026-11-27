@@ -94,7 +94,7 @@ Content post: /post teaser|tip|behind, then the album with one line.
 
 On a preview: ✅ Approve · ✏️ Edit (plain words) · ❌ Reject · ⏩ Now · 🕒 Move · ⏭ Skip
 
-move P-0007 fri 19:00 · skip P-0007 · posted P-0007 · test P-0007
+move P-0007 fri 19:00 · skip P-0007 · posted P-0007 · test P-0007 · show P-0007
 /week  this week's slots      /slots  the calendar file
 /pause /resume  scheduled messages      /cancel  drop a pending question
 /ping  check the bot"""
