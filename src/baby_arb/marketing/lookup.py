@@ -44,6 +44,14 @@ BRAVE_URL = "https://api.search.brave.com/res/v1/web/search"
 NAIROBI = ZoneInfo("Africa/Nairobi")
 MAX_FACTS = 5
 MAX_PAGES = 2
+MAX_PAGE_TRIES = 4
+# Many shop sites answer 404/403 to requests without ordinary browser headers.
+PAGE_HEADERS = {
+    "User-Agent": ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+                   "(KHTML, like Gecko) Chrome/131.0 Safari/537.36"),
+    "Accept": "text/html,application/xhtml+xml",
+    "Accept-Language": "en",
+}
 MAX_PAGE_BYTES = 600_000
 PAGE_TEXT_CHARS = 6_000
 KE_RETAILERS = ("jumia.co.ke", "kilimall.co.ke", "masoko.com", "carrefour.ke",
@@ -141,7 +149,7 @@ class BraveSearch:
         if urlparse(url).scheme != "https":
             return ""
         try:
-            with self._client.stream("GET", url, headers={"User-Agent": "Mozilla/5.0"}) as resp:
+            with self._client.stream("GET", url, headers=PAGE_HEADERS) as resp:
                 if resp.status_code != 200 or "html" not in resp.headers.get("content-type", ""):
                     return ""
                 body = b""
@@ -151,10 +159,55 @@ class BraveSearch:
                         break
         except httpx.HTTPError:
             return ""
-        soup = BeautifulSoup(body, "html.parser")
-        for tag in soup(["script", "style", "noscript", "svg", "nav", "footer", "header"]):
-            tag.decompose()
-        return " ".join(soup.get_text(" ").split())[:PAGE_TEXT_CHARS]
+        return page_text(body)[:PAGE_TEXT_CHARS]
+
+
+def _product_ld(data: Any) -> list[str]:
+    """Name and description of schema.org Product objects in JSON-LD."""
+    out: list[str] = []
+    items = data if isinstance(data, list) else [data]
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        if "@graph" in item:
+            out += _product_ld(item["@graph"])
+        kinds = item.get("@type")
+        kinds = kinds if isinstance(kinds, list) else [kinds]
+        if "Product" in kinds:
+            out += [_strip_tags(str(item.get(k) or "")) for k in ("name", "description")]
+    return [t for t in out if t]
+
+
+def page_text(html: bytes | str) -> str:
+    """Product-first text of a page.
+
+    Order: JSON-LD Product name and description, meta/og descriptions, the main
+    content block, then the rest of the page. Shop pages put menus, carts and
+    sign-up prompts first, which used to fill the whole text budget.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    parts: list[str] = []
+    for script in soup.find_all("script", type="application/ld+json"):
+        try:
+            parts += _product_ld(json.loads(script.string or ""))
+        except ValueError:
+            continue
+    for meta in (soup.find("meta", attrs={"property": "og:description"}),
+                 soup.find("meta", attrs={"name": "description"})):
+        if meta is not None and meta.get("content"):
+            parts.append(str(meta.get("content")))
+    for tag in soup(["script", "style", "noscript", "svg", "nav", "footer", "header", "form"]):
+        tag.decompose()
+    main = soup.find(attrs={"itemprop": "description"}) or soup.find("main") or soup.body
+    if main is not None:
+        parts.append(main.get_text(" "))
+    seen: set[str] = set()
+    unique = []
+    for part in (" ".join(p.split()) for p in parts):
+        if part and part not in seen:
+            seen.add(part)
+            unique.append(part)
+    return " \n".join(unique)
 
 
 def _strip_tags(text: str) -> str:
@@ -268,10 +321,16 @@ def lookup(search: BraveSearch, title: str, brand: str | None,
             if not any(s in _domain(h.url) for s in SKIP_DOMAINS)]
     relevant = [h for h in hits if _names_item(f"{h.title} {h.description}", brand, words)]
     pages: dict[str, str] = {}
-    for hit in relevant[:MAX_PAGES]:
+    for hit in relevant[:MAX_PAGE_TRIES]:
         text = search.fetch_text(hit.url)
         if text and _names_item(text, brand, words):
             pages[hit.url] = text
+        if len(pages) >= MAX_PAGES:
+            break
+    if not pages and relevant:
+        # No page could be read: the search snippets are the sources (same grounding rule).
+        pages = {h.url: f"{h.title}. {h.description}" for h in relevant[:MAX_PAGE_TRIES]}
+        out.notes.append("facts from search snippets (pages could not be read)")
     out.facts = extract_facts(title, pages, completer)
     if not relevant:
         out.notes.append("no matching pages found")

@@ -41,7 +41,8 @@ def test_confident_identification_goes_straight_to_preview(ctx):
     assert "Age range: 6-36 months (maker.example.com)" in step.info
     assert "Seen new at KES 6,499 on jumia.co.ke." in step.info
     assert step.price_ref == 6499
-    assert "Details: Age range: 6-36 months." in step.caption_ig
+    # The box's 6m+ wins over the shop page's age range in captions.
+    assert "6m+" in step.caption_ig and "6-36 months" not in step.caption_ig
     # Push walker is REVIEW (walker type), never BLOCK.
     assert step.needs_check
 
@@ -117,3 +118,16 @@ def test_identify_and_lookup_run_once(ctx):
     pl.answer(ctx, step.code, "title", "Graco Modes stroller")
     assert calls == {"id": 1, "look": 1}
 
+
+
+def test_caption_facts_skip_long_values_and_conflicting_age(ctx):
+    long = "Piano Keyboard: Four colorful keys play musical notes, sparking creativity and more"
+    ctx.lookup = lambda *a: LookupResult(facts=[
+        Fact("Age range", "9 months and older", "https://a.example/x"),
+        Fact("Features", long, "https://a.example/x"),
+        Fact("Batteries", "2 x AA (not included)", "https://a.example/x"),
+    ])
+    step = pl.intake(ctx, [PHOTO], "2000 B")
+    assert "Details: Batteries: 2 x AA (not included)." in step.caption_ig
+    assert "9 months" not in step.caption_ig and "Piano" not in step.caption_ig
+    assert any(line.startswith("Age range: 9 months and older") for line in step.info)

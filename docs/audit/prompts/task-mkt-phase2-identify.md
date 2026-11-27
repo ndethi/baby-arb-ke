@@ -37,3 +37,19 @@
   Phase 1 bug, fixed here because the live bot runs this branch): JPEG copies for Telegram
   (PNGs stay the files to post), longer media timeouts, an album failure no longer stops the
   card, a `show P-0003` command re-sends the latest preview, and an error handler logs one line.
+
+## 2026-11-27 · Claude Code (claude-opus-5-5) · Brave key live
+
+**Prompt** (verbatim; key redacted):
+> [REDACTED: Brave Search API key] this is the brave search key, lets restart the bot
+
+**Decisions:**
+- Key written to the gitignored `.env` (mode 600); not printed or committed.
+- First live lookup found the right products but no facts: shop pages answered 404 without
+  browser headers, and the 6,000-character page budget was spent on menus and carts. Now:
+  browser `Accept` headers, up to 4 page tries, product-first text (JSON-LD Product, og/meta
+  description, main block), and search snippets as sources when no page can be read (same
+  grounding rule). Live result: batteries, material, size and a feature, each with its source.
+  No Kenyan retailer listed the Huanger walker, so no price was suggested.
+- The shop page said "9 months and older" while the box says 6m+: captions skip an online age
+  range when the listing has one, and skip values over 60 characters. The preview shows all.

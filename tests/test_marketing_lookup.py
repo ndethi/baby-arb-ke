@@ -145,3 +145,43 @@ def test_supported_values(value):
     from baby_arb.marketing.lookup import _supported
 
     assert _supported(value, PAGE)
+
+
+SHOP_PAGE = """<html><head>
+<meta property="og:description" content="Huanger Music Walker for 6-36 months.">
+<script type="application/ld+json">{"@context": "https://schema.org", "@graph": [
+ {"@type": "Product", "name": "Huanger Music Walker",
+  "description": "<p>Needs 2 x AA batteries (not included). Size 45x42x34cm.</p>"}]}</script>
+</head><body><nav>Shop by category</nav><div>Cart is empty. Sign up!</div>
+<div itemprop="description">Piano keys and a drawing board.</div></body></html>"""
+
+
+def test_page_text_puts_product_data_first():
+    from baby_arb.marketing.lookup import page_text
+
+    text = page_text(SHOP_PAGE)
+    assert text.startswith("Huanger Music Walker")
+    assert "2 x AA batteries" in text and "<p>" not in text
+    assert "6-36 months" in text and "Piano keys" in text
+    assert "Shop by category" not in text
+
+
+@respx.mock
+def test_shop_pages_get_browser_headers(db_engine):
+    route = respx.get(MAKER).mock(return_value=httpx.Response(
+        200, text=SHOP_PAGE, headers={"content-type": "text/html"}))
+    _brave(db_engine).fetch_text(MAKER)
+    headers = route.calls[0].request.headers
+    assert "text/html" in headers["Accept"] and headers["Accept-Language"] == "en"
+
+
+@respx.mock
+def test_snippets_are_the_sources_when_no_page_can_be_read(db_engine):
+    respx.get(BRAVE_URL).mock(return_value=httpx.Response(200, json=_results(
+        ("Huanger Music Walker", MAKER, "Needs 2 AA batteries, not included"))))
+    respx.get(MAKER).mock(return_value=httpx.Response(404))
+    result = lookup(_brave(db_engine), "Huanger Music Walker", "Huanger", _completer(
+        {"facts": [{"label": "Batteries", "value": "2 AA batteries", "source": MAKER},
+                   {"label": "Weight limit", "value": "20 kg", "source": MAKER}]}))
+    assert [f.value for f in result.facts] == ["2 AA batteries"]
+    assert "search snippets" in result.notes[0]

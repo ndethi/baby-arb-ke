@@ -215,8 +215,28 @@ def _caption_input(listing: Listing) -> cap.CaptionInput:
         ref_new_price=listing.ref_new_price,
         seller=listing.kind == "seller",
         content_kind=_content_kind(listing),
-        facts=tuple(f"{f['label']}: {f['value']}" for f in _facts(listing))[:3],
+        facts=caption_facts(listing),
     )
+
+
+CAPTION_FACT_MAX = 60
+
+
+def caption_facts(listing: Listing) -> tuple[str, ...]:
+    """Up to 3 short looked-up facts for captions.
+
+    The preview shows every fact with its source; captions skip long values
+    (often cut mid-sentence) and an online age range when the admin or the box
+    already gave one, since shop pages can disagree with the item in hand.
+    """
+    out = []
+    for fact in _facts(listing):
+        if len(fact["value"]) > CAPTION_FACT_MAX:
+            continue
+        if fact["label"].lower().startswith("age") and listing.age_range:
+            continue
+        out.append(f"{fact['label']}: {fact['value']}")
+    return tuple(out[:3])
 
 
 def details_of(listing: Listing) -> dict[str, Any]:
