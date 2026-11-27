@@ -49,6 +49,8 @@ data/cache/
 data/tracker/
 data/demand_gen/
 *.db
+*.db-wal
+*.db-shm
 *.sqlite
 *.sqlite3
 secrets/
