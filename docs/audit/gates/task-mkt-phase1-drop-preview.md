@@ -73,3 +73,21 @@ One entry per pre-push gate run. Written by scripts/pre_push.sh.
 | secrets | PASS | regex fallback (gitleaks not installed) |
 | pip-audit | PASS |  |
 | prompt-log | PASS | docs/audit/prompts/task-mkt-phase1-drop-preview.md |
+
+## 2026-11-27T07:27Z · ac022dc · PASS
+
+- base: origin/task/mkt-phase0-foundations (c781e57)
+- runner: ndethi
+
+| check | result | detail |
+|---|---|---|
+| branch | PASS | task/mkt-phase1-drop-preview |
+| clean-tree | PASS |  |
+| commits | PASS | 14 commits |
+| hygiene | PASS |  |
+| ruff | PASS | 30 files |
+| pytest | PASS |  |
+| bandit | PASS | medium+ severity |
+| secrets | PASS | regex fallback (gitleaks not installed) |
+| pip-audit | PASS |  |
+| prompt-log | PASS | docs/audit/prompts/task-mkt-phase1-drop-preview.md |
