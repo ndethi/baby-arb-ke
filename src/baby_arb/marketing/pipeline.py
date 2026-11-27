@@ -201,6 +201,7 @@ def _view(listing: Listing) -> ListingView:
         ref_new_price=listing.ref_new_price,
         seller=listing.kind == "seller",
         content=listing.kind == "content",
+        chips=image_chips(listing) if listing.kind != "content" else (),
     )
 
 
@@ -220,23 +221,48 @@ def _caption_input(listing: Listing) -> cap.CaptionInput:
 
 
 CAPTION_FACT_MAX = 60
+CAPTION_FACTS = 5
+# Facts worth a sticker on the photo, in this order.
+CHIP_LABELS = ("age", "size", "folded", "weight", "batter", "feature", "material")
+
+
+def _usable_facts(listing: Listing) -> list[dict[str, str]]:
+    """Facts that may appear in posts: an online age range is dropped when the
+    admin or the box already gave one (shop pages can disagree with the item)."""
+    return [f for f in _facts(listing)
+            if not (f["label"].lower().startswith("age") and listing.age_range)]
 
 
 def caption_facts(listing: Listing) -> tuple[str, ...]:
-    """Up to 3 short looked-up facts for captions.
+    """Up to CAPTION_FACTS "Label: value" bullets for captions.
 
-    The preview shows every fact with its source; captions skip long values
-    (often cut mid-sentence) and an online age range when the admin or the box
-    already gave one, since shop pages can disagree with the item in hand.
+    The preview shows every fact with its source. A value too long for a bullet
+    (often cut mid-sentence) uses its checked short form, or is left out.
     """
     out = []
-    for fact in _facts(listing):
-        if len(fact["value"]) > CAPTION_FACT_MAX:
-            continue
-        if fact["label"].lower().startswith("age") and listing.age_range:
-            continue
-        out.append(f"{fact['label']}: {fact['value']}")
-    return tuple(out[:3])
+    for fact in _usable_facts(listing):
+        value = fact["value"]
+        if len(value) > CAPTION_FACT_MAX:
+            value = fact.get("short") or ""
+        if value:
+            out.append(f"{fact['label']}: {value}")
+    return tuple(out[:CAPTION_FACTS])
+
+
+def image_chips(listing: Listing) -> tuple[str, ...]:
+    """Up to 3 short facts for the details strip on the image, most useful first."""
+    facts = _usable_facts(listing)
+
+    def rank(fact: dict[str, str]) -> int:
+        label = fact["label"].lower()
+        return next((i for i, key in enumerate(CHIP_LABELS) if key in label), len(CHIP_LABELS))
+
+    chips: list[str] = []
+    for fact in sorted(facts, key=rank):
+        text = fact.get("short") or (fact["value"] if len(fact["value"]) <= 24 else "")
+        if text and text.lower() not in (c.lower() for c in chips):
+            chips.append(text)
+    return tuple(chips[:3])
 
 
 def details_of(listing: Listing) -> dict[str, Any]:
@@ -355,6 +381,7 @@ def answer(ctx: Context, code: str, what: str, text: str) -> Step:
             ctx.session.add(EditEvent(listing_code=listing.code, round=listing.round,
                                       raw_text=text, op="correct_model", target="title",
                                       before=guess, after=title, parsed_by="admin"))
+            listing.brand = listing.model = None  # the admin's words replace the guess
         listing.title, listing.model_source = title, "admin"
     else:
         raise FlowError(f"Nothing to answer for {what}.")
@@ -466,11 +493,20 @@ def _identify_once(ctx: Context, listing: Listing) -> Need | None:
 
 
 def _lookup_once(ctx: Context, listing: Listing) -> None:
-    """Look the item up online once, when a lookup is configured."""
+    """Look the item up online once, when a lookup is configured.
+
+    Only for a specific item: a brand read from the photos, or a name the admin
+    typed or confirmed. A generic guess ("Baby activity walker") matched other
+    products in a live test and put their specs into the caption.
+    """
     if ctx.lookup is None or not listing.title or "lookup" in details_of(listing):
         return
-    result = ctx.lookup(listing.title, listing.brand)
-    _set_details(listing, lookup=result.to_json())
+    if not listing.brand and listing.model_source != "admin":
+        _set_details(listing, lookup={"facts": [], "price_ref": None,
+                                      "notes": ["no brand visible, so no online lookup"]})
+    else:
+        result = ctx.lookup(listing.title, listing.brand)
+        _set_details(listing, lookup=result.to_json())
     ctx.session.add(listing)
     ctx.session.commit()
 
@@ -483,6 +519,9 @@ def _info_lines(listing: Listing) -> list[str]:
         lines.append(f"Item: {listing.title} (auto, {pct}%). Wrong? Edit: 'title <item>'.")
     for fact in _facts(listing):
         lines.append(f"{fact['label']}: {fact['value']} ({_host(fact['source'])})")
+    for note in (details_of(listing).get("lookup") or {}).get("notes") or []:
+        if note.startswith("no brand"):
+            lines.append(f"Online lookup skipped: {note}. Edit 'title <brand model>' to add it.")
     ref = _price_ref(listing)
     if ref and ref.get("amount") != listing.ref_new_price:
         lines.append(f"Seen new at KES {ref['amount']:,} on {_host(ref['url'])}.")

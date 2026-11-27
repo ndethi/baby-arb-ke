@@ -53,3 +53,28 @@
   No Kenyan retailer listed the Huanger walker, so no price was suggested.
 - The shop page said "9 months and older" while the box says 6m+: captions skip an online age
   range when the listing has one, and skip values over 60 characters. The preview shows all.
+
+## 2026-11-27 · Claude Code (claude-opus-5-5) · details on the image
+
+**Prompt** (verbatim):
+> do we want to overlay these details we picked up online on top of the image so image is self
+> explanatory, basic details and enrich the caption with more details , and then lets consider in
+> the next phase if we want to directly interface with the socials (FB, IG, tiktok) api - is this
+> in the pipeline
+
+> lets start on the overlay and captions now,let me know what needs to be set up on the meta
+> side of things
+
+**Decisions:**
+- Details strip (template v2): up to 3 short facts above the price on feed and story, on the
+  second TikTok frame (the first stays photo, price and code). New `details` element: the
+  creative checks cover it, and "hide the details" / "details bigger" are edits.
+- Each fact now has a model-written `short` form (<= 24 chars) that must pass the same
+  page-support check as the value; unsupported shorts are dropped. Chips prefer size,
+  batteries, features; captions get up to 5 "• Label: value" bullets (short form when the
+  value is long). An online age range never replaces the one from the line or the box.
+- Live run found the lookup trusting a generic guess: unbranded photos gave "Baby activity
+  walker", and Brave returned another product whose specs reached the caption. Lookup now
+  runs only for a brand read from the photos or a name the admin typed or confirmed; a
+  correction clears the model's brand. The preview says when the lookup was skipped.
+- Meta setup: listed for the operator in chat (spec section 12); nothing set up from here.

@@ -168,3 +168,28 @@ def test_golden_images(browser, tmp_path, name, view, asset):
     if not golden.exists():
         pytest.skip(f"no golden for {sys.platform}; run with UPDATE_GOLDEN=1 and review")
     assert _diff(result.paths[asset], golden) <= TOLERANCE
+
+
+CHIPS = ListingView("P-0008", 2000, "B", "6m+", ref_new_price=8500,
+                    chips=("45x42x34 cm", "2x AA, not included", "Piano keys"))
+
+
+def test_details_strip_renders_clean(browser, tmp_path):
+    result = _render(browser, tmp_path, CHIPS)
+    assert result.all_issues == []
+    html = (tmp_path / "out" / "_html" / "feed.html").read_text()
+    assert 'data-el="details"' in html and "Piano keys" in html
+    tiktok_1 = (tmp_path / "out" / "_html" / "tiktok_1.html").read_text()
+    tiktok_2 = (tmp_path / "out" / "_html" / "tiktok_2.html").read_text()
+    assert "Piano keys" not in tiktok_1 and "Piano keys" in tiktok_2
+
+
+def test_details_strip_can_be_hidden_and_drops_long_chips(browser, tmp_path):
+    view = ListingView("P-0009", 2000, chips=("x" * 40, "Piano keys"))
+    result = _render(browser, tmp_path, view, Layout(photo_order=[1, 2, 3],
+                                                      toggles={"details": False}))
+    html = (tmp_path / "out" / "_html" / "feed.html").read_text()
+    assert 'data-el="details"' not in html and result.all_issues == []
+    result = _render(browser, tmp_path, view)
+    html = (tmp_path / "out" / "_html" / "feed.html").read_text()
+    assert "x" * 40 not in html and "Piano keys" in html

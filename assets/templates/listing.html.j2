@@ -30,6 +30,8 @@
   .condition { background: var(--soft); color: var(--ink); font-size: {{ px.condition }}px; font-weight: 700; }
   .anchor { background: var(--soft); color: var(--ink); font-size: {{ px.anchor }}px; font-weight: 600; padding: 0.3em 0.6em; border-radius: 0.4em; }
   .seller-tag { position: absolute; left: 0; top: {{ seller_tag_top }}px; background: var(--ink); color: var(--paper); font-size: {{ px.seller_tag }}px; font-weight: 700; padding: 0.3em 0.6em; border-radius: 0.4em; }
+  .details { position: absolute; display: flex; flex-wrap: wrap; gap: 10px; max-width: 100%; font-size: {{ px.details }}px; font-weight: 600; line-height: 1.1; }
+  .chip { background: var(--soft); color: var(--ink); padding: 0.25em 0.55em; border-radius: 0.4em; white-space: nowrap; }
   .cta { position: absolute; left: 0; right: 0; bottom: {{ cta_bottom }}px; height: {{ cta_height }}px; background: var(--ink); color: var(--paper); display: flex; align-items: center; justify-content: center; font-size: {{ px.cta }}px; font-weight: 800; letter-spacing: 0.02em; }
 </style>
 </head>
@@ -45,6 +47,9 @@
     {% endif %}
     {% if price_text %}
     <div class="badge price {{ pos.price }}" data-el="price">{{ price_text }}</div>
+    {% endif %}
+    {% if details %}
+    <div class="details" data-el="details" style="{{ details_style }}">{% for chip in details %}<span class="chip">{{ chip }}</span>{% endfor %}</div>
     {% endif %}
     {% if show.anchor and anchor_text %}
     <div class="anchor" data-el="anchor" style="position:absolute; {{ anchor_style }}">{{ anchor_text }}</div>

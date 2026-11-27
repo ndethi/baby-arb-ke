@@ -4,7 +4,12 @@ Assets per round (ENGINE_SPEC Phase 1, Render):
 - feed_4x5.png   1080x1350: hero photo, price, code, condition, CTA strip,
   "Seller listing" tag on L-codes.
 - story_9x16.png 1080x1920: same elements inside story-safe margins.
-- tiktok/NN.png  1080x1920: one frame per photo; price and code on the first.
+- tiktok/NN.png  1080x1920: one frame per photo; price and code on the first,
+  the details strip on the second.
+
+The details strip shows up to MAX_CHIPS short looked-up facts ("6m+", "45x42x34
+cm") above the price; facts come with a source and the admin sees them on the
+preview before anything is posted.
 
 Real photos only: the template frames the photo and never alters it. The
 "new in Nairobi from KES X" anchor appears only when the admin gave a
@@ -41,7 +46,10 @@ TEMPLATES_DIR = REPO_ROOT / "assets" / "templates"
 
 BASE_PX: dict[str, int] = {
     "price": 96, "code": 44, "condition": 44, "cta": 52, "anchor": 38, "seller_tag": 40,
+    "details": 34,
 }
+MAX_CHIPS = 3
+MAX_CHIP_CHARS = 26
 STEP = 0.15
 
 FOCUS_CSS: dict[str, str] = {
@@ -80,6 +88,7 @@ class ListingView:
     ref_new_price: int | None = None
     seller: bool = False
     content: bool = False  # C-code: no price, no buy CTA
+    chips: tuple[str, ...] = ()  # short looked-up facts for the details strip
 
 
 @dataclass
@@ -126,6 +135,19 @@ def _anchor_style(layout: Layout, price_px: int) -> str:
     return f"{horizontal}: 0; {vertical}: {offset}px;"
 
 
+def _details_style(layout: Layout, px: dict[str, int], above_price: bool,
+                   anchor_shown: bool) -> str:
+    """Stack the strip above the price (and the anchor line when shown)."""
+    vertical, horizontal = layout.position("price").split("-")
+    offset = 0
+    if above_price:
+        offset = round(px["price"] * 1.61) + 16
+        if anchor_shown:
+            offset += round(px["anchor"] * 1.75) + 14
+    justify = "flex-end" if horizontal == "right" else "flex-start"
+    return f"{horizontal}: 0; {vertical}: {offset}px; justify-content: {justify};"
+
+
 def _env() -> Environment:
     return Environment(
         loader=FileSystemLoader(str(TEMPLATES_DIR)),
@@ -134,15 +156,28 @@ def _env() -> Environment:
 
 
 def build_context(
-    view: ListingView, layout: Layout, fmt: Format, photo: Path, focus: Focus, first: bool
+    view: ListingView, layout: Layout, fmt: Format, photo: Path, focus: Focus, first: bool,
+    details_frame: bool = False,
 ) -> dict[str, Any]:
-    """Template variables for one asset."""
+    """Template variables for one asset.
+
+    `details_frame` marks the TikTok frame that carries the details strip.
+    """
     px = {el: px_for(el, layout.step(el)) for el in BASE_PX}
     show_price = view.price is not None and not view.content and (fmt.name != "tiktok" or first)
     needs_cta = fmt.name in {"feed", "story"} and not view.content
     seller_tag_top = 0
     if layout.shown("condition") and layout.position("condition") == "top-left":
         seller_tag_top = round(px["condition"] * 1.61) + 14
+    anchor_text = (
+        f"New in Nairobi from {kes(view.ref_new_price)}"
+        if view.ref_new_price and not view.seller and show_price
+        else None
+    )
+    chips = [c for c in view.chips if len(c) <= MAX_CHIP_CHARS][:MAX_CHIPS]
+    show_details = bool(chips) and layout.shown("details") and (
+        fmt.name in {"feed", "story"} or details_frame
+    )
     return {
         "template": layout.template,
         "template_version": TEMPLATE_VERSION,
@@ -162,12 +197,11 @@ def build_context(
         "code": view.code,
         "price_text": kes(view.price) if show_price and view.price is not None else None,
         "condition_text": _condition_text(view) if (fmt.name != "tiktok" or first) else None,
-        "anchor_text": (
-            f"New in Nairobi from {kes(view.ref_new_price)}"
-            if view.ref_new_price and not view.seller and show_price
-            else None
-        ),
+        "anchor_text": anchor_text,
         "anchor_style": _anchor_style(layout, px["price"]),
+        "details": chips if show_details else [],
+        "details_style": _details_style(layout, px, show_price,
+                                        bool(anchor_text) and layout.shown("anchor")),
         "seller": view.seller,
         "seller_tag_top": seller_tag_top,
         "cta_text": f"DM {view.code} to buy" if needs_cta else None,
@@ -260,7 +294,8 @@ def render_listing(
         for i, n in enumerate(order, start=1):
             jobs.append((f"tiktok_{i}", TIKTOK, n, i == 1, out_dir / "tiktok" / f"{i:02d}.png"))
         for name, fmt, n, first, out in jobs:
-            ctx = build_context(view, layout, fmt, photos[n], layout.crops.get(n, "center"), first)
+            ctx = build_context(view, layout, fmt, photos[n], layout.crops.get(n, "center"),
+                                first, details_frame=name == "tiktok_2")
             exp = Expectation(
                 width=fmt.width,
                 height=fmt.height,

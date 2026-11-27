@@ -92,7 +92,7 @@ def template_captions(item: CaptionInput) -> Captions:
     if detail:
         lines.append(". ".join(detail) + ".")
     if item.facts:
-        lines.append("Details: " + "; ".join(item.facts) + ".")
+        lines.append("\n".join(f"• {fact}" for fact in item.facts))
     if item.ref_new_price and not item.seller:
         lines.append(f"New in Nairobi from {_kes(item.ref_new_price)}.")
     if item.seller:
@@ -100,9 +100,10 @@ def template_captions(item: CaptionInput) -> Captions:
     lines.append(f"Pickup or delivery in Nairobi. {cta(item.code)}.")
     ig = "\n\n".join(lines) + "\n\n" + " ".join(BASE_TAGS)
     price = f" {_kes(item.price)}" if item.price is not None else ""
+    short_facts = " · ".join(f.split(": ", 1)[-1] for f in item.facts[:2])
     tiktok = (
         f"{item.title or 'Fresh find'}{price} | {item.code}\n"
-        f"{lines[1] if len(lines) > 1 else ''}\n{cta(item.code)}\n"
+        f"{lines[1] if len(lines) > 1 else ''}\n{short_facts}\n{cta(item.code)}\n"
         + " ".join(BASE_TAGS)
     ).replace("\n\n", "\n")
     return Captions(ig, tiktok, "template")
@@ -153,8 +154,9 @@ ones given, never invent brand, model, size or condition details.
 
 Return JSON only: {"ig": "...", "tiktok": "..."}.
 ig (Instagram and Facebook): line 1 is "<item> · <price> · <age range>" exactly as
-given; then 1-2 short lines on condition; then the exact call to action; then at
-most 5 hashtags. tiktok: line 1 is "<item> <price> | <code>"; one short line; the
+given; then 1-2 short lines on condition; then the product details as "• Label: value"
+bullets, using only the details given, word for word; then the exact call to action;
+then at most 5 hashtags. tiktok: line 1 is "<item> <price> | <code>"; one short line; the
 exact call to action; 3 to 5 hashtags."""
 
 

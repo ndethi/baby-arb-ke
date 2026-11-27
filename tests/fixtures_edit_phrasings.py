@@ -27,6 +27,8 @@ PHRASINGS: list[tuple[str, list[tuple[str, str | None, object]]]] = [
     ("hide the cta", [("toggle", "cta", "off")]),
     ("remove the new in nairobi line", [("toggle", "anchor", "off")]),
     ("show the condition badge", [("toggle", "condition", "on")]),
+    ("hide the details", [("toggle", "details", "off")]),
+    ("details bigger", [("resize", "details", "up")]),
     ("price 1800", [("set_field", "price", 1800)]),
     ("change price to 1,800", [("set_field", "price", 1800)]),
     ("price to 2.5k", [("set_field", "price", 2500)]),

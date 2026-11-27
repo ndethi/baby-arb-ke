@@ -185,3 +185,14 @@ def test_snippets_are_the_sources_when_no_page_can_be_read(db_engine):
                    {"label": "Weight limit", "value": "20 kg", "source": MAKER}]}))
     assert [f.value for f in result.facts] == ["2 AA batteries"]
     assert "search snippets" in result.notes[0]
+
+
+def test_short_forms_must_be_short_and_supported():
+    facts = extract_facts("Huanger Music Walker", PAGES, _completer({"facts": [
+        {"label": "Age range", "value": "6-36 months", "short": "6-36m", "source": MAKER},
+        {"label": "Batteries", "value": "3 AA batteries", "short": "3x AA batteries",
+         "source": MAKER},
+        {"label": "Batteries", "value": "3 AA batteries",
+         "short": "Three AA batteries for hours of fun", "source": MAKER},
+    ]}))
+    assert [f.short for f in facts] == ["6-36m", "3x AA batteries", None]

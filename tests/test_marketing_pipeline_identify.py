@@ -128,6 +128,57 @@ def test_caption_facts_skip_long_values_and_conflicting_age(ctx):
         Fact("Batteries", "2 x AA (not included)", "https://a.example/x"),
     ])
     step = pl.intake(ctx, [PHOTO], "2000 B")
-    assert "Details: Batteries: 2 x AA (not included)." in step.caption_ig
+    assert "• Batteries: 2 x AA (not included)" in step.caption_ig
     assert "9 months" not in step.caption_ig and "Piano" not in step.caption_ig
     assert any(line.startswith("Age range: 9 months and older") for line in step.info)
+
+
+def test_chips_and_bullets_use_checked_short_forms(ctx, tmp_path):
+    long = "Piano Keyboard: Four colorful keys play musical notes, sparking creativity and more"
+    ctx.lookup = lambda *a: LookupResult(facts=[
+        Fact("Features", long, "https://a.example/x", short="Piano keys"),
+        Fact("Material", "Plastic", "https://a.example/x"),
+        Fact("Size", "45x42x34cm", "https://a.example/x", short="45x42x34 cm"),
+        Fact("Batteries", "2 x AA Batteries (not included)", "https://a.example/x",
+             short="2x AA, not included"),
+        Fact("Age range", "9 months and older", "https://a.example/x", short="9m+"),
+    ])
+    seen = {}
+
+    def renderer(view, photos, layout, out_dir):
+        seen["chips"] = view.chips
+        return fake_renderer(view, photos, layout, out_dir)
+
+    ctx.renderer = renderer
+    step = pl.intake(ctx, [PHOTO, PHOTO], "2000 B 6m+")
+    # Size first, then batteries, then features; the online age loses to the line's 6m+.
+    assert seen["chips"] == ("45x42x34 cm", "2x AA, not included", "Piano keys")
+    for bullet in ("• Features: Piano keys", "• Material: Plastic", "• Size: 45x42x34cm",
+                   "• Batteries: 2 x AA Batteries (not included)"):
+        assert bullet in step.caption_ig
+    assert "9 months" not in step.caption_ig
+    assert "45x42x34cm · 2 x AA Batteries (not included)" not in step.caption_tiktok
+
+    step = pl.edit(ctx, step.code, "hide the details")
+    assert step.echo == ["hide details strip"]
+
+
+def test_generic_guess_without_brand_is_not_looked_up(ctx):
+    looked = []
+    ctx.identifier = lambda photos: Identification(
+        category="push_walker", item_name="Baby activity walker", confidence=0.9)
+    ctx.lookup = lambda *a: looked.append(a) or _found()
+    step = pl.intake(ctx, [PHOTO], "2000")
+    assert isinstance(step, pl.Preview) and looked == []
+    assert any(line.startswith("Online lookup skipped") for line in step.info)
+    assert "•" not in step.caption_ig
+
+
+def test_admin_named_item_is_looked_up_with_the_admins_words(ctx):
+    looked = []
+    ctx.identifier = lambda photos: Identification(
+        brand="Chicco", category="push_walker", item_name="Walker", confidence=0.4)
+    ctx.lookup = lambda title, brand: looked.append((title, brand)) or _found()
+    step = pl.intake(ctx, [PHOTO], "2000")
+    pl.answer(ctx, step.code, "title", "Huanger Music Walker")
+    assert looked == [("Huanger Music Walker", None)]

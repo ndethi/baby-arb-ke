@@ -16,7 +16,7 @@ from baby_arb.marketing.render.layout import Rect
 # 1080 px shown on a ~390 pt wide phone screen is a 0.36 scale; 32 px is
 # about 11.5 pt at phone size, the smallest comfortable caption text.
 MIN_TEXT_PX = 32
-TEXT_ELEMENTS = ("price", "code", "condition", "cta", "anchor", "seller_tag")
+TEXT_ELEMENTS = ("price", "code", "condition", "cta", "anchor", "seller_tag", "details")
 
 MEASURE_JS = """
 () => Array.from(document.querySelectorAll('[data-el]')).map(el => {
