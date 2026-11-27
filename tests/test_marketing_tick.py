@@ -47,7 +47,6 @@ def _approved(session, tmp_path, now, line="2000 B", title="Graco Modes stroller
     ctx = _ctx(session, tmp_path, now)
     step = pl.intake(ctx, [PHOTO], line)
     step = pl.answer(ctx, step.code, "title", title)
-    step = pl.override(ctx, step.code)
     pl.approve(ctx, step.code)
     return step.code
 

@@ -42,7 +42,10 @@ ALBUM_WAIT_SECONDS = 2.0
 TICK_SECONDS = 300
 CODE = r"([PLC]-\d{4})"
 _MOVE = re.compile(rf"^move\s+{CODE}\s+(.+)$", re.IGNORECASE)
-_SIMPLE = re.compile(rf"^(skip|posted)\s+{CODE}$", re.IGNORECASE)
+_SIMPLE = re.compile(rf"^(skip|posted|test)\s+{CODE}$", re.IGNORECASE)
+_SIMPLE_STEPS: dict[str, Callable[[pl.Context, str], str]] = {
+    "skip": pl.skip, "posted": pl.posted, "test": pl.mark_test,
+}
 
 
 @dataclass
@@ -222,7 +225,7 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     if m := _SIMPLE.match(text):
         verb, code = m.group(1).lower(), m.group(2).upper()
-        fn = pl.skip if verb == "skip" else pl.posted
+        fn = _SIMPLE_STEPS[verb]
         result = await run_flow(deps, actor, lambda ctx: fn(ctx, code))
         await _respond(context, deps, chat_id, user.id, result)
         return

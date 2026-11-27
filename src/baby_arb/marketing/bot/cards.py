@@ -34,10 +34,14 @@ class Album:
 Out = Text | Album
 
 
-def preview_buttons(code: str) -> Buttons:
-    """✅ Approve ✏️ Edit ❌ Reject / ⏩ Now 🕒 Move ⏭ Skip."""
+def preview_buttons(code: str, needs_check: bool = False) -> Buttons:
+    """✅ Approve ✏️ Edit ❌ Reject / ⏩ Now 🕒 Move ⏭ Skip.
+
+    With open safety review reasons the approve label says the admin checked it.
+    """
+    approve = "✅ Approve (checked)" if needs_check else "✅ Approve"
     return [
-        [("✅ Approve", f"a:approve:{code}"), ("✏️ Edit", f"a:edit:{code}"),
+        [(approve, f"a:approve:{code}"), ("✏️ Edit", f"a:edit:{code}"),
          ("❌ Reject", f"a:reject:{code}")],
         [("⏩ Now", f"a:now:{code}"), ("🕒 Move", f"a:move:{code}"),
          ("⏭ Skip", f"a:skip:{code}")],
@@ -45,7 +49,8 @@ def preview_buttons(code: str) -> Buttons:
 
 
 def _card(p: Preview) -> str:
-    lines = [f"{p.code} · preview round {p.round}"]
+    test = "🧪 TEST · " if p.is_test else ""
+    lines = [f"{test}{p.code} · preview round {p.round}"]
     if p.echo:
         lines.append("Applied: " + "; ".join(p.echo))
     lines.append(p.slot_line)
@@ -59,9 +64,6 @@ def _card(p: Preview) -> str:
 def step_messages(step: Step) -> list[Out]:
     """Messages for a pipeline step."""
     if isinstance(step, Need):
-        if step.what == "override":
-            return [Text(step.message, [[("✅ Checked, override", f"a:override:{step.code}"),
-                                         ("❌ Reject", f"a:reject:{step.code}")]])]
         return [Text(step.message)]
     if isinstance(step, Blocked):
         reasons = ", ".join(r.replace("_", " ") for r in step.reasons)
@@ -75,7 +77,7 @@ def step_messages(step: Step) -> list[Out]:
         out.append(Album(assets, caption=f"{step.code} · round {step.round}"))
     out.append(Text(f"IG + FB caption:\n\n{step.caption_ig}"))
     out.append(Text(f"TikTok caption:\n\n{step.caption_tiktok}"))
-    out.append(Text(_card(step), preview_buttons(step.code)))
+    out.append(Text(_card(step), preview_buttons(step.code, step.needs_check)))
     return out
 
 
@@ -84,12 +86,12 @@ HELP = """babyReShop Ops bot
 New listing: send 1-6 photos as one album with a caption line:
   2000 B 0-36m washed, small mark on strap     (own stock)
   #seller 4500 Mary barely used                (seller listing)
-  optional: buy 600 · ref 8500 (new-in-Nairobi price)
+  optional: buy 600 · ref 8500 (new-in-Nairobi price) · #test (a test drop)
 Content post: /post teaser|tip|behind, then the album with one line.
 
 On a preview: ✅ Approve · ✏️ Edit (plain words) · ❌ Reject · ⏩ Now · 🕒 Move · ⏭ Skip
 
-move P-0007 fri 19:00 · skip P-0007 · posted P-0007
+move P-0007 fri 19:00 · skip P-0007 · posted P-0007 · test P-0007
 /week  this week's slots      /slots  the calendar file
 /pause /resume  scheduled messages      /cancel  drop a pending question
 /ping  check the bot"""

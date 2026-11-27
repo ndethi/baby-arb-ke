@@ -115,6 +115,14 @@ def mkt_override(code: str) -> None:
     _show(_run(lambda ctx: pl.override(ctx, code)))
 
 
+@mkt_app.command("test")
+def mkt_test(code: str) -> None:
+    """Flag a listing as a test drop (closed unless already live)."""
+    from baby_arb.marketing import pipeline as pl
+
+    _show(_run(lambda ctx: pl.mark_test(ctx, code)))
+
+
 @mkt_app.command("render")
 def mkt_render(code: str) -> None:
     """Render the next round of a listing in preview."""
@@ -274,6 +282,8 @@ def bot_run(
                                             help="Run cal tick every 5 min")] = True,
 ) -> None:
     """Run the shop bot (long polling). Answers allow-listed admins only."""
+    from telegram import Update
+
     from baby_arb.marketing.bot.app import BotNotConfiguredError, build_application
 
     try:
@@ -282,7 +292,9 @@ def bot_run(
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=1) from exc
     console.print("[green]babyReShop bot running. Ctrl-C to stop.[/green]")
-    app.run_polling()
+    # Ask for every update type: Telegram keeps the last allowed_updates filter, and an
+    # earlier messages-only getUpdates call had silently turned off button presses.
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
 @mkt_app.command("llm-check")

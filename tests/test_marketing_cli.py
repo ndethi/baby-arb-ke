@@ -45,9 +45,8 @@ def test_cli_drop_to_approved(env):
     out = _ok(["mkt", "intake", "--album", str(env), "--line", "2000 B 0-36m washed"])
     assert "Needs title" in out
     out = _ok(["mkt", "answer", "P-0001", "title", "Graco Modes stroller"])
-    assert "Needs override" in out
-    out = _ok(["mkt", "override", "P-0001"])
     assert "P-0001 round 1" in out and "DM P-0001 to buy" in out
+    assert "Check before approving" in out
     out = _ok(["mkt", "edit", "P-0001", "--text", "price bigger"])
     assert "applied: make price badge larger" in out
     out = _ok(["mkt", "approve", "P-0001"])
@@ -55,6 +54,7 @@ def test_cli_drop_to_approved(env):
     out = _ok(["mkt", "cal", "week"])
     assert "This week's slots" in out
     _ok(["mkt", "cal", "posted", "P-0001"])
+    assert "marked as a test" in _ok(["mkt", "test", "P-0001"])
 
 
 def test_cli_block_exits_cleanly_and_approve_refuses(env):

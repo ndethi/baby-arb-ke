@@ -75,8 +75,6 @@ def _to_preview(ctx, line="2000 B 0-36m washed, small mark on strap",
     step = pl.intake(ctx, [PHOTO] * photos, line)
     if isinstance(step, pl.Need) and step.what == "title":
         step = pl.answer(ctx, step.code, "title", title)
-    if isinstance(step, pl.Need) and step.what == "override":
-        step = pl.override(ctx, step.code)
     assert isinstance(step, pl.Preview), step
     return step
 
@@ -85,11 +83,10 @@ def test_full_happy_path(ctx):
     step = pl.intake(ctx, [PHOTO] * 3, "2000 B 0-36m washed, small mark on strap")
     assert isinstance(step, pl.Need) and step.what == "title" and step.code == "P-0001"
     step = pl.answer(ctx, "P-0001", "title", "Graco FastAction Fold stroller")
-    # Stroller is REVIEW, and recall is not checked until Phase 2.
-    assert isinstance(step, pl.Need) and step.what == "override"
-    assert "stroller" in step.message and "recall not checked" in step.message
-    step = pl.override(ctx, "P-0001")
-    assert isinstance(step, pl.Preview)
+    # REVIEW (stroller; recall not checked until Phase 2) goes straight to the preview.
+    assert isinstance(step, pl.Preview) and step.needs_check
+    assert any("Check before approving" in w and "stroller" in w and "recall not checked" in w
+               for w in step.warnings)
     assert step.round == 1 and len(step.assets) == 3
     assert step.slot_line == "Slot: Thu 26 Nov, 19:00 (drop 1/6)"
     assert "KES 2,000" in step.caption_ig and "DM P-0001 to buy" in step.caption_ig
@@ -101,8 +98,12 @@ def test_full_happy_path(ctx):
     sched = ctx.session.exec(select(ScheduleRow)).one()
     assert sched.status == "PROPOSED" and sched.kind == "drop"
 
+    verdict = pl.latest_verdict(ctx.session, "P-0001")
+    assert verdict.override_by is None
     text = pl.approve(ctx, "P-0001")
     assert "queued for Thu 26 Nov 19:00" in text
+    # Approving is the admin's recorded check.
+    assert pl.latest_verdict(ctx.session, "P-0001").override_by == "111"
     assert ctx.session.get(Listing, "P-0001").status == "SCHEDULED"
     assert ctx.session.exec(select(ScheduleRow)).one().status == "QUEUED"
 
@@ -127,7 +128,7 @@ def test_block_stops_pipeline_and_can_never_be_approved(ctx):
     with pytest.raises(pl.FlowError):
         pl.approve(ctx, "P-0001")
     with pytest.raises(pl.FlowError):
-        pl.override(ctx, "P-0001")
+        pl.skip(ctx, "P-0001")
     assert ctx.session.exec(select(Render)).all() == []
 
 
@@ -191,21 +192,34 @@ def test_edit_that_makes_it_a_car_seat_blocks(ctx):
     assert ctx.session.exec(select(ScheduleRow)).one().status == "SKIPPED"
 
 
-def test_new_review_reason_after_edit_needs_fresh_override(ctx):
+def test_new_review_reason_after_edit_is_shown_again(ctx):
     _to_preview(ctx, line="2000 B 0-36m washed")
-    pl.edit(ctx, "P-0001", "title Ergobaby Omni carrier")
+    step = pl.edit(ctx, "P-0001", "title Ergobaby Omni carrier")
+    assert isinstance(step, pl.Preview) and step.needs_check
+    assert any("carrier or strap" in w for w in step.warnings)
     verdict = ctx.session.exec(
         select(SafetyVerdictRow).order_by(SafetyVerdictRow.id.desc())).first()
     assert verdict.verdict == "REVIEW" and verdict.override_by is None
-    with pytest.raises(pl.FlowError, match="override"):
-        pl.approve(ctx, "P-0001")
-
-
-def test_same_review_reasons_keep_override(ctx):
-    _to_preview(ctx)
-    pl.edit(ctx, "P-0001", "title Graco Modes stroller")
     pl.approve(ctx, "P-0001")
-    assert ctx.session.get(Listing, "P-0001").status == "SCHEDULED"
+    assert pl.latest_verdict(ctx.session, "P-0001").override_by == "111"
+
+
+def test_test_tag_and_mark_test(ctx):
+    step = pl.intake(ctx, [PHOTO], "#test 2000 B")
+    step = pl.answer(ctx, step.code, "title", "Graco Modes stroller")
+    assert isinstance(step, pl.Preview) and step.is_test
+    assert step.warnings[0] == "TEST drop: not a real listing."
+    listing = ctx.session.get(Listing, "P-0001")
+    assert listing.is_test and listing.price == 2000 and listing.grade == "B"
+
+    _to_preview(ctx)  # P-0002, a real drop
+    pl.approve(ctx, "P-0002")
+    text = pl.mark_test(ctx, "P-0002")
+    assert "marked as a test and closed" in text
+    assert ctx.session.get(Listing, "P-0002").status == "REJECTED"
+    rows = ctx.session.exec(select(ScheduleRow).where(ScheduleRow.listing_code == "P-0002"))
+    assert [r.status for r in rows] == ["SKIPPED"]
+    assert ctx.session.exec(select(EditEvent)).all() == []  # not drift
 
 
 def test_approve_now(ctx):
@@ -259,8 +273,6 @@ def test_seller_listing_gets_l_code_and_listing_slot(ctx):
 def _finish(ctx, step, title):
     if isinstance(step, pl.Need) and step.what == "title":
         step = pl.answer(ctx, step.code, "title", title)
-    if isinstance(step, pl.Need) and step.what == "override":
-        step = pl.override(ctx, step.code)
     assert isinstance(step, pl.Preview), step
     return step
 

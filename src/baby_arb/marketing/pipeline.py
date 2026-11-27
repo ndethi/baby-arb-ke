@@ -5,8 +5,12 @@ here talks to Telegram, Meta or a buyer; the bot turns results into
 messages. Hard rules enforced here:
 - The price is the admin's. It is stored as given and only an admin edit
   changes it; the pricing check only adds a warning.
-- BLOCK can never be approved. REVIEW (including "recall not checked") needs
-  an admin override before approval.
+- BLOCK can never be approved and stops the flow before any render.
+- REVIEW (including "recall not checked") renders straight to the preview with
+  the reasons as a warning; the admin's Approve is the explicit override and
+  is recorded on the verdict (`override_by`).
+- A `#test` tag (or `mark_test`) flags a listing as a test so reports and
+  later phases can leave it out.
 - Model calls go through llm.py (captions, edit parsing) and degrade to
   templates or a question.
 """
@@ -15,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -75,7 +80,7 @@ class Need:
     """The flow is waiting for the admin."""
 
     code: str
-    what: Literal["price", "title", "override"]
+    what: Literal["price", "title"]
     message: str
 
 
@@ -100,6 +105,8 @@ class Preview:
     warnings: list[str] = field(default_factory=list)
     issues: list[str] = field(default_factory=list)
     echo: list[str] = field(default_factory=list)
+    needs_check: bool = False  # REVIEW reasons the admin confirms by approving
+    is_test: bool = False
 
 
 @dataclass
@@ -206,6 +213,13 @@ def _save_photos(ctx: Context, code: str, photos: list[bytes]) -> None:
 
 # --------------------------------------------------------------------------- intake
 
+def strip_test_tag(line: str | None) -> tuple[str | None, bool]:
+    """Remove a `#test` tag from a caption line; True when it was there."""
+    if not line or not re.search(r"(?<!\w)#test\b", line, re.IGNORECASE):
+        return line, False
+    return " ".join(re.sub(r"(?<!\w)#test\b", " ", line, flags=re.IGNORECASE).split()), True
+
+
 def intake(
     ctx: Context, photos: list[bytes], line: str | None, content_kind: str | None = None
 ) -> Step:
@@ -225,6 +239,7 @@ def intake(
         raise FlowError("Send 1 to 6 photos as one album with the caption line.")
     if len(photos) > MAX_PHOTOS:
         raise FlowError(f"Max {MAX_PHOTOS} photos per listing; got {len(photos)}.")
+    line, is_test = strip_test_tag(line)
     if content_kind is not None:
         code = next_code(ctx.session, "C")
         listing = Listing(code=code, kind="content", status="INTAKE", category=content_kind,
@@ -246,6 +261,7 @@ def intake(
             created_by=ctx.actor,
         )
     listing.layout = dump_layout(Layout(photo_order=list(range(1, len(photos) + 1))))
+    listing.is_test = is_test
     ctx.session.add(listing)
     ctx.session.flush()
     _save_photos(ctx, code, photos)
@@ -309,12 +325,11 @@ def _screen(ctx: Context, listing: Listing) -> SafetyVerdictRow:
     return row
 
 
-def _needs_override(verdict: SafetyVerdictRow) -> Need:
-    reasons = ", ".join(json.loads(verdict.reasons)).replace("_", " ")
-    return Need(verdict.listing_code, "override",
-                f"{verdict.listing_code} needs a check before it can go out: {reasons}. "
-                "Recall lookup arrives in Phase 2. Confirm you checked it (model not "
-                "recalled, parts complete), or reject.")
+def review_reasons(verdict: SafetyVerdictRow | None) -> list[str]:
+    """Readable reasons of a REVIEW verdict not yet confirmed by an admin."""
+    if verdict is None or verdict.verdict != "REVIEW" or verdict.override_by:
+        return []
+    return [r.replace("_", " ") for r in json.loads(verdict.reasons)]
 
 
 def advance(ctx: Context, code: str) -> Step:
@@ -336,10 +351,6 @@ def advance(ctx: Context, code: str) -> Step:
         move_listing(ctx.session, listing, "SCREENED", "system")
         ctx.session.commit()
     if listing.status == "SCREENED":
-        verdict_row = latest_verdict(ctx.session, code)
-        if (listing.kind != "content" and verdict_row is not None
-                and verdict_row.verdict == "REVIEW" and not verdict_row.override_by):
-            return _needs_override(verdict_row)
         return render_round(ctx, listing)
     raise FlowError(f"{code} is {listing.status}; nothing to advance.")
 
@@ -403,9 +414,12 @@ def render_round(ctx: Context, listing: Listing, echo: list[str] | None = None,
     ctx.session.commit()
     warnings = price_warnings(listing.price, listing.buy_price)
     verdict = latest_verdict(ctx.session, listing.code)
-    if verdict is not None and verdict.verdict == "REVIEW":
-        warnings.append(f"Safety: REVIEW, overridden by {verdict.override_by}"
-                        if verdict.override_by else "Safety: REVIEW, override needed")
+    pending = review_reasons(verdict)
+    if pending:
+        warnings.append("Check before approving: " + ", ".join(pending)
+                        + ". Approve confirms you checked it.")
+    if listing.is_test:
+        warnings.insert(0, "TEST drop: not a real listing.")
     return Preview(
         code=listing.code,
         round=listing.round,
@@ -416,6 +430,8 @@ def render_round(ctx: Context, listing: Listing, echo: list[str] | None = None,
         warnings=warnings,
         issues=result.all_issues + (extra_issues or []),
         echo=echo or [],
+        needs_check=bool(pending),
+        is_test=listing.is_test,
     )
 
 
@@ -519,7 +535,9 @@ def _check_approvable(ctx: Context, listing: Listing) -> None:
     if verdict.verdict == "BLOCK":
         raise FlowError(f"{listing.code} is BLOCKED and can never be approved.")
     if verdict.verdict == "REVIEW" and not verdict.override_by:
-        raise FlowError(f"{listing.code} needs an admin override first.")
+        # Approving (or skipping into APPROVED) is the admin's explicit check.
+        verdict.override_by = ctx.actor
+        ctx.session.add(verdict)
 
 
 def approve(ctx: Context, code: str, now: bool = False) -> str:
@@ -680,3 +698,30 @@ def latest_assets(session: Session, code: str) -> list[Path]:
         .order_by(col(Render.id))
     ).all()
     return [Path(r.path) for r in rows]
+
+
+CLOSABLE = ("INTAKE", "SCREENED", "RENDERED", "PREVIEW", "EDITING", "APPROVED", "SCHEDULED")
+
+
+def mark_test(ctx: Context, code: str) -> str:
+    """Flag a listing as a test and close it if it has not gone live.
+
+    Not logged as drift: a test is not an admin judgement on the content.
+
+    Raises:
+        FlowError: unknown code.
+    """
+    listing = get_listing(ctx.session, code)
+    listing.is_test = True
+    closed = ""
+    if listing.status in CLOSABLE:
+        row = active_schedule(ctx.session, listing.code)
+        if row is not None:
+            move_schedule(ctx.session, row, "SKIPPED", ctx.actor, "test drop")
+        listing.status, before = "REJECTED", listing.status
+        ctx.session.add(ListingEvent(listing_code=listing.code, from_status=before,
+                                     to_status="REJECTED", actor=ctx.actor, note="test drop"))
+        closed = " and closed"
+    ctx.session.add(listing)
+    ctx.session.commit()
+    return f"🧪 {listing.code} marked as a test{closed}."

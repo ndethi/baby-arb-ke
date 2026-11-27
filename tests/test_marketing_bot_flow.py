@@ -90,15 +90,13 @@ async def test_album_to_preview_through_buttons(deps):
     assert any("what is it" in m[1] for m in ctx.bot.messages)
 
     await h.on_text(_msg("Graco FastAction Fold stroller"), ctx)
-    override = ctx.bot.messages[-1]
-    assert "needs a check" in override[1] and override[2] is not None
-
-    await h.on_button(_press("a:override:P-0001"), ctx)
-    assert ctx.bot.albums == [3]
+    assert ctx.bot.albums == [3]  # REVIEW goes straight to the preview
     card = ctx.bot.messages[-1]
     # The bot uses the real clock, so only the weekday and time are fixed.
     assert card[1].startswith("P-0001 · preview round 1") and "Slot: Thu" in card[1]
-    assert "19:00 (drop 1/6)" in card[1]
+    assert "19:00 (drop 1/6)" in card[1] and "Check before approving" in card[1]
+    labels = [b.text for row in card[2].inline_keyboard for b in row]
+    assert labels[0] == "✅ Approve (checked)"
 
     await h.on_button(_press("a:approve:P-0001"), ctx)
     assert "approved and queued" in ctx.bot.messages[-1][1]
@@ -133,7 +131,6 @@ async def test_edit_reject_and_text_commands(deps):
     ctx = _context(deps)
     await _album(ctx)
     await h.on_text(_msg("Graco Modes stroller"), ctx)
-    await h.on_button(_press("a:override:P-0001"), ctx)
 
     await h.on_button(_press("a:edit:P-0001"), ctx)
     await h.on_text(_msg("price bigger, use photo 2 as main"), ctx)
@@ -178,13 +175,15 @@ async def test_pause_resume_and_week(deps):
 def test_step_messages_shapes(tmp_path):
     asset = tmp_path / "feed.png"
     asset.write_bytes(b"x")
-    preview = Preview("P-0001", 2, [asset], "ig", "tt", "Slot: x", ["w"], ["i"], ["e"])
+    preview = Preview("P-0001", 2, [asset], "ig", "tt", "Slot: x", ["w"], ["i"], ["e"],
+                      needs_check=True, is_test=True)
     outs = step_messages(preview)
     assert isinstance(outs[0], Album) and isinstance(outs[-1], Text)
-    assert len(outs[-1].buttons) == 2 and outs[-1].buttons[0][0][1] == "a:approve:P-0001"
+    assert len(outs[-1].buttons) == 2
+    assert outs[-1].buttons[0][0] == ("✅ Approve (checked)", "a:approve:P-0001")
+    assert outs[-1].text.startswith("🧪 TEST · P-0001")
     assert step_messages(Blocked("P-0002", ["car_seat"]))[0].text.startswith("⛔ P-0002")
-    need = step_messages(Need("P-0003", "override", "check"))[0]
-    assert need.buttons[0][0][1] == "a:override:P-0003"
+    assert step_messages(Need("P-0003", "price", "price?"))[0].buttons == []
 
 
 def test_application_wires_phase1_handlers():
@@ -220,3 +219,30 @@ async def test_tick_loop_starts_and_stops_with_the_app(deps, monkeypatch):
     assert calls == [1] and not task.done()
     await app.post_shutdown(app)
     assert task.cancelled()
+
+
+async def test_test_command_marks_listing(deps):
+    ctx = _context(deps)
+    await _album(ctx)
+    await h.on_text(_msg("test P-0001"), ctx)
+    assert "marked as a test" in ctx.bot.messages[-1][1]
+
+
+def test_bot_run_asks_telegram_for_button_presses(monkeypatch):
+    """Telegram keeps the last allowed_updates filter; the bot must reset it."""
+    from baby_arb.cli import app as cli_app
+    from telegram import Update
+    from typer.testing import CliRunner
+
+    seen = {}
+
+    class FakeApp:
+        def run_polling(self, **kwargs):
+            seen.update(kwargs)
+
+    monkeypatch.setattr("baby_arb.marketing.bot.app.build_application",
+                        lambda *_a, **_k: FakeApp())
+    result = CliRunner().invoke(cli_app, ["bot", "run", "--no-tick"])
+    assert result.exit_code == 0
+    assert seen["allowed_updates"] == Update.ALL_TYPES
+    assert "callback_query" in seen["allowed_updates"]
