@@ -76,6 +76,10 @@ class Settings(BaseSettings):
     marketing_assets_dir: str = "assets"
     render_browser_channel: str | None = None  # e.g. "chrome"; default tries bundled first
 
+    # Phase 2 identify: online lookup through Brave Search (free tier).
+    brave_search_api_key: str | None = None
+    brave_daily_call_cap: int = 50
+
     # Storage
     database_url: str = "sqlite:///./data/baby_arb.db"
 
