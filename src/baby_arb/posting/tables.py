@@ -91,6 +91,7 @@ class Listing(SQLModel, table=True):
     caption_tiktok: str | None = None
     round: int = 0  # render round shown in the latest preview
     created_by: str | None = None  # admin Telegram ID or "cli"
+    is_test: bool = False  # test drops: never real stock, left out of reports
     created_at: datetime = Field(default_factory=utcnow)
     live_at: datetime | None = None
     sold_at: datetime | None = None
